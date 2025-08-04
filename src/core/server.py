@@ -2,7 +2,6 @@
 Main server implementation for Azure Terraform MCP Server.
 """
 
-import asyncio
 import logging
 from typing import Dict, Any
 from pydantic import Field
@@ -13,7 +12,8 @@ from core.models import (
     TerraformAzureProviderDocsResult,
     SecurityScanResult
 )
-from tools.documentation import get_documentation_provider
+from tools.azurerm_docs_provider import get_azurerm_documentation_provider
+from tools.azapi_docs_provider import get_azapi_documentation_provider
 from tools.terraform_runner import get_terraform_runner
 from tools.security_rules import get_azure_security_validator
 from tools.best_practices import get_best_practices_provider
@@ -34,7 +34,8 @@ def create_server(config: Config) -> FastMCP:
     mcp = FastMCP("Azure Terraform MCP Server", version="0.1.0")
     
     # Get service instances
-    doc_provider = get_documentation_provider()
+    azurerm_doc_provider = get_azurerm_documentation_provider()
+    azapi_doc_provider = get_azapi_documentation_provider()
     terraform_runner = get_terraform_runner()
     security_validator = get_azure_security_validator()
     best_practices = get_best_practices_provider()
@@ -55,7 +56,7 @@ def create_server(config: Config) -> FastMCP:
             The documentation for the specified AzureRM resource type
         """
         try:
-            result = await doc_provider.search_azurerm_provider_docs(resource_type_name)
+            result = await azurerm_doc_provider.search_azurerm_provider_docs(resource_type_name)
             
             # Format the response
             formatted_doc = f"# {result.resource_type} Documentation\n\n"
@@ -98,7 +99,7 @@ def create_server(config: Config) -> FastMCP:
             The documentation for the specified AzAPI resource type
         """
         try:
-            result = await doc_provider.search_azapi_provider_docs(resource_type_name)
+            result = await azapi_doc_provider.search_azapi_provider_docs(resource_type_name)
             
             # Format the response
             if "error" in result:
@@ -145,7 +146,7 @@ def create_server(config: Config) -> FastMCP:
         Returns:
             Comprehensive documentation result including arguments, attributes, and examples
         """
-        return await doc_provider.search_azurerm_provider_docs(resource_type, search_query)
+        return await azurerm_doc_provider.search_azurerm_provider_docs(resource_type, search_query)
     
     # ==========================================
     # TERRAFORM COMMAND TOOLS

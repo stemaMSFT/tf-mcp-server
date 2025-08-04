@@ -2,8 +2,8 @@
 
 from .terraform_runner import TerraformRunner, get_terraform_runner
 from .security_rules import AzureSecurityValidator, get_azure_security_validator
-from .validation import HCLValidator, SecurityValidator, get_hcl_validator, get_security_validator
-from .documentation import get_documentation_provider
+from .azurerm_docs_provider import AzureRMDocumentationProvider, get_azurerm_documentation_provider
+from .azapi_docs_provider import AzAPIDocumentationProvider, get_azapi_documentation_provider
 from .best_practices import get_best_practices_provider
 
 __all__ = [
@@ -11,10 +11,9 @@ __all__ = [
     'get_terraform_runner',
     'AzureSecurityValidator', 
     'get_azure_security_validator',
-    'HCLValidator',
-    'SecurityValidator',
-    'get_hcl_validator',
-    'get_security_validator',
-    'get_documentation_provider',
+    'AzureRMDocumentationProvider',
+    'get_azurerm_documentation_provider',
+    'AzAPIDocumentationProvider',
+    'get_azapi_documentation_provider',
     'get_best_practices_provider'
 ]
