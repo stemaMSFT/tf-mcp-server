@@ -6,13 +6,22 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 
+class ArgumentDetail(BaseModel):
+    """Detailed argument information."""
+    name: str = Field(..., description="Argument name")
+    description: str = Field(..., description="Argument description")
+    required: bool = Field(default=False, description="Whether the argument is required")
+    type: str = Field(default="string", description="Argument data type")
+    block_arguments: Optional[List['ArgumentDetail']] = Field(default=None, description="Nested block arguments")
+
+
 class TerraformAzureProviderDocsResult(BaseModel):
     """Result structure for Azure provider documentation search."""
     
     resource_type: str = Field(..., description="The Azure resource type")
     documentation_url: str = Field(..., description="URL to the documentation")
     summary: str = Field(..., description="Summary of the resource")
-    arguments: List[Dict[str, str]] = Field(default_factory=list, description="Resource arguments")
+    arguments: List[ArgumentDetail] = Field(default_factory=list, description="Resource arguments")
     attributes: List[Dict[str, str]] = Field(default_factory=list, description="Resource attributes")
     examples: List[str] = Field(default_factory=list, description="Usage examples")
 
@@ -76,3 +85,7 @@ class AzureResourceAnalysis(BaseModel):
     dependencies: List[str] = Field(default_factory=list, description="Resource dependencies")
     security_issues: List[str] = Field(default_factory=list, description="Identified security issues")
     recommendations: List[str] = Field(default_factory=list, description="Improvement recommendations")
+
+
+# Enable forward references for recursive models
+ArgumentDetail.model_rebuild()
