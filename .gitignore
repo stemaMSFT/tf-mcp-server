@@ -18,3 +18,5 @@ tfsample/
 .env.local
 
 data/
+
+src/temp

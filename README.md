@@ -96,8 +96,9 @@ The server provides the following MCP tools:
 
 #### Documentation Tools
 - **`azurerm_terraform_documentation_retriever`**: Retrieve specific AzureRM resource documentation
+- **`azurerm_datasource_documentation_retriever`**: Retrieve specific AzureRM data source documentation
 - **`azapi_terraform_documentation_retriever`**: Retrieve AzAPI resource schemas and documentation
-- **`search_azurerm_provider_docs`**: Search Azure provider documentation with optional filtering
+- **`search_azurerm_provider_docs`**: Search Azure provider documentation for both resources and data sources with optional filtering
 
 #### Validation Tools
 - **`terraform_hcl_code_validator`**: Validate HCL code syntax and structure
@@ -132,6 +133,26 @@ The server provides the following MCP tools:
   "arguments": {
     "resource_type": "storage_account",
     "search_query": "encryption"
+  }
+}
+```
+
+#### Get Data Source Documentation
+```python
+# Using the MCP tool for data sources
+{
+  "tool": "search_azurerm_provider_docs",
+  "arguments": {
+    "resource_type": "virtual_machine",
+    "doc_type": "data-source"
+  }
+}
+
+# Or use the dedicated data source tool
+{
+  "tool": "azurerm_datasource_documentation_retriever",
+  "arguments": {
+    "resource_type_name": "virtual_machine"
   }
 }
 ```

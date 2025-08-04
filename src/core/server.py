@@ -56,7 +56,7 @@ def create_server(config: Config) -> FastMCP:
             The documentation for the specified AzureRM resource type
         """
         try:
-            result = await azurerm_doc_provider.search_azurerm_provider_docs(resource_type_name)
+            result = await azurerm_doc_provider.search_azurerm_provider_docs(resource_type_name, "", "resource")
             
             # Format the response
             formatted_doc = f"# {result.resource_type} Documentation\n\n"
@@ -134,19 +134,21 @@ def create_server(config: Config) -> FastMCP:
     @mcp.tool("search_azurerm_provider_docs")
     async def search_azurerm_provider_docs(
         resource_type: str = Field(..., description="Azure resource type (e.g., 'virtual_machine', 'storage_account')"),
-        search_query: str = Field("", description="Specific search query within the resource documentation")
+        search_query: str = Field("", description="Specific search query within the resource documentation"),
+        doc_type: str = Field("resource", description="Type of documentation: 'resource' for resources or 'data-source' for data sources")
     ) -> TerraformAzureProviderDocsResult:
         """
-        Search and retrieve comprehensive Azure provider documentation for Terraform resources.
+        Search and retrieve comprehensive Azure provider documentation for Terraform resources and data sources.
         
         Args:
             resource_type: The Azure resource type to search for
             search_query: Optional specific query to search within the documentation
+            doc_type: Type of documentation to retrieve ('resource' or 'data-source')
             
         Returns:
             Comprehensive documentation result including arguments, attributes, and examples
         """
-        return await azurerm_doc_provider.search_azurerm_provider_docs(resource_type, search_query)
+        return await azurerm_doc_provider.search_azurerm_provider_docs(resource_type, search_query, doc_type)
     
     # ==========================================
     # TERRAFORM COMMAND TOOLS
@@ -335,6 +337,49 @@ def create_server(config: Config) -> FastMCP:
                 "analysis_summary": "Analysis failed",
                 "recommendations": []
             }
+    
+    @mcp.tool("azurerm_datasource_documentation_retriever")
+    async def retrieve_azurerm_datasource_docs(resource_type_name: str) -> str:
+        """
+        Retrieve documentation for a specific AzureRM data source type in Terraform.
+        
+        Args:
+            resource_type_name: The name of the AzureRM data source type
+            
+        Returns:
+            The documentation for the specified AzureRM data source type
+        """
+        try:
+            result = await azurerm_doc_provider.search_azurerm_provider_docs(resource_type_name, "", "data-source")
+            
+            # Format the response
+            formatted_doc = f"# {result.resource_type} Data Source Documentation\n\n"
+            formatted_doc += f"**Summary:** {result.summary}\n\n"
+            formatted_doc += f"**Documentation URL:** {result.documentation_url}\n\n"
+            
+            if result.arguments:
+                formatted_doc += "## Arguments\n\n"
+                for arg in result.arguments:
+                    required = " (Required)" if arg.get("required") == "true" else ""
+                    formatted_doc += f"- **{arg['name']}**{required}: {arg['description']}\n"
+                formatted_doc += "\n"
+            
+            if result.attributes:
+                formatted_doc += "## Attributes\n\n"
+                for attr in result.attributes:
+                    formatted_doc += f"- **{attr['name']}**: {attr['description']}\n"
+                formatted_doc += "\n"
+            
+            if result.examples:
+                formatted_doc += "## Examples\n\n"
+                for i, example in enumerate(result.examples, 1):
+                    formatted_doc += f"### Example {i}\n\n```hcl\n{example}\n```\n\n"
+            
+            return formatted_doc
+            
+        except Exception as e:
+            logger.error(f"Error retrieving AzureRM data source documentation: {e}")
+            return f"Error retrieving data source documentation for {resource_type_name}: {str(e)}"
     
     return mcp
 
