@@ -14,9 +14,9 @@ except ImportError:
     HAS_BS4 = False
     BeautifulSoup = None
 
-from core.models import TerraformAzureProviderDocsResult
-from core.config import load_azapi_schema
-from core.utils import normalize_resource_type
+from ..core.models import TerraformAzureProviderDocsResult
+from ..core.config import load_azapi_schema
+from ..core.utils import normalize_resource_type
 
 
 class AzureDocumentationProvider:

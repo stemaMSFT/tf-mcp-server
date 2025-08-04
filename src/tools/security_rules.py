@@ -3,7 +3,7 @@ Security validation rules and utilities for Azure Terraform MCP Server.
 """
 
 from typing import Dict, Any, List
-from core.utils import extract_hcl_from_markdown
+from ..core.utils import extract_hcl_from_markdown
 
 
 class AzureSecurityValidator:

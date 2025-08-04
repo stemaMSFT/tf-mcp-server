@@ -3,12 +3,12 @@ Terraform command execution utilities for Azure Terraform MCP Server.
 """
 
 from typing import Dict, Any
-from core.terraform_validator import get_terraform_validator
-from core.utils import extract_hcl_from_markdown
+from ..core.terraform_executor import get_terraform_executor
+from ..core.utils import extract_hcl_from_markdown
 
 
 class TerraformRunner:
-    """Terraform command execution utilities."""
+    """Terraform command execution utilities with simplified interface."""
     
     async def execute_terraform_command(self, command: str, hcl_content: str, var_file_content: str = None, **kwargs) -> Dict[str, Any]:
         """
@@ -32,8 +32,8 @@ class TerraformRunner:
             }
         
         try:
-            async with get_terraform_validator() as validator:
-                result = await validator.execute_with_hcl_content(
+            async with get_terraform_executor() as executor:
+                result = await executor.execute_with_hcl_content(
                     command=command,
                     hcl_content=hcl_content,
                     var_file_content=var_file_content,
@@ -60,12 +60,11 @@ class TerraformRunner:
         Returns:
             Formatted initialization result
         """
-        result = await self.execute_terraform_command('init', hcl_content, upgrade=upgrade)
-        
-        if result['exit_code'] == 0:
-            return f"✅ Terraform initialization successful!\n\n{result['stdout']}"
-        else:
-            return f"❌ Terraform initialization failed:\n\n{result['stderr']}"
+        try:
+            async with get_terraform_executor() as executor:
+                return await executor.init_with_formatting(hcl_content, upgrade=upgrade)
+        except Exception as e:
+            return f"❌ Error during Terraform initialization: {str(e)}"
     
     async def terraform_plan(self, hcl_content: str, var_file_content: str = None) -> str:
         """
@@ -78,20 +77,11 @@ class TerraformRunner:
         Returns:
             Formatted plan result
         """
-        # First initialize
-        init_result = await self.execute_terraform_command('init', hcl_content)
-        if init_result['exit_code'] != 0:
-            return f"❌ Terraform init failed before plan:\n\n{init_result['stderr']}"
-        
-        # Then run plan
-        result = await self.execute_terraform_command('plan', hcl_content, var_file_content)
-        
-        if result['exit_code'] == 0:
-            return f"✅ Terraform plan successful!\n\n{result['stdout']}"
-        elif result['exit_code'] == 2:
-            return f"📋 Terraform plan completed with changes:\n\n{result['stdout']}"
-        else:
-            return f"❌ Terraform plan failed:\n\n{result['stderr']}"
+        try:
+            async with get_terraform_executor() as executor:
+                return await executor.plan_with_formatting(hcl_content, var_file_content)
+        except Exception as e:
+            return f"❌ Error during Terraform plan: {str(e)}"
     
     async def terraform_apply(self, hcl_content: str, var_file_content: str = None, auto_approve: bool = False) -> str:
         """
@@ -105,18 +95,11 @@ class TerraformRunner:
         Returns:
             Formatted apply result
         """
-        # First initialize
-        init_result = await self.execute_terraform_command('init', hcl_content)
-        if init_result['exit_code'] != 0:
-            return f"❌ Terraform init failed before apply:\n\n{init_result['stderr']}"
-        
-        # Then run apply
-        result = await self.execute_terraform_command('apply', hcl_content, var_file_content, auto_approve=auto_approve)
-        
-        if result['exit_code'] == 0:
-            return f"✅ Terraform apply successful!\n\n{result['stdout']}"
-        else:
-            return f"❌ Terraform apply failed:\n\n{result['stderr']}"
+        try:
+            async with get_terraform_executor() as executor:
+                return await executor.apply_with_formatting(hcl_content, var_file_content, auto_approve)
+        except Exception as e:
+            return f"❌ Error during Terraform apply: {str(e)}"
     
     async def terraform_destroy(self, hcl_content: str, var_file_content: str = None, auto_approve: bool = False) -> str:
         """
@@ -130,18 +113,11 @@ class TerraformRunner:
         Returns:
             Formatted destroy result
         """
-        # First initialize
-        init_result = await self.execute_terraform_command('init', hcl_content)
-        if init_result['exit_code'] != 0:
-            return f"❌ Terraform init failed before destroy:\n\n{init_result['stderr']}"
-        
-        # Then run destroy
-        result = await self.execute_terraform_command('destroy', hcl_content, var_file_content, auto_approve=auto_approve)
-        
-        if result['exit_code'] == 0:
-            return f"✅ Terraform destroy successful!\n\n{result['stdout']}"
-        else:
-            return f"❌ Terraform destroy failed:\n\n{result['stderr']}"
+        try:
+            async with get_terraform_executor() as executor:
+                return await executor.destroy_with_formatting(hcl_content, var_file_content, auto_approve)
+        except Exception as e:
+            return f"❌ Error during Terraform destroy: {str(e)}"
     
     async def format_hcl_code(self, hcl_content: str) -> str:
         """
@@ -153,14 +129,9 @@ class TerraformRunner:
         Returns:
             Formatted HCL content or error message
         """
-        if not hcl_content or not hcl_content.strip():
-            return "❌ Error: No HCL content provided for formatting."
-        
         try:
-            async with get_terraform_validator() as validator:
-                formatted_content = await validator.format_hcl(hcl_content)
-                return formatted_content
-                
+            async with get_terraform_executor() as executor:
+                return await executor.format_hcl_with_error_handling(hcl_content)
         except Exception as e:
             return f"❌ Error during HCL formatting: {str(e)}"
 

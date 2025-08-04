@@ -160,7 +160,7 @@ tf-mcp-server/
 │   │   ├── config.py           # Configuration management
 │   │   ├── models.py           # Data models
 │   │   ├── server.py           # FastMCP server implementation
-│   │   ├── terraform_validator.py  # Terraform validation utilities
+│   │   ├── terraform_executor.py    # Terraform execution utilities
 │   │   └── utils.py            # Utility functions
 │   └── tools/                  # Tool implementations
 │       ├── __init__.py
