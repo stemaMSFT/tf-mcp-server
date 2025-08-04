@@ -189,17 +189,258 @@ class TerraformValidator:
         
         return await self._run_terraform_command(cmd, working_dir)
     
-    async def init_terraform(self, working_dir: str) -> Dict[str, Any]:
+    async def init_terraform(self, working_dir: str, upgrade: bool = False) -> Dict[str, Any]:
         """
         Run terraform init in the specified directory.
         
         Args:
             working_dir: Directory to initialize
+            upgrade: Whether to upgrade modules and providers
             
         Returns:
             Initialization result
         """
-        return await self._run_terraform_command(['init', '-no-color'], working_dir)
+        cmd = ['init', '-no-color']
+        if upgrade:
+            cmd.append('-upgrade')
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def apply_terraform(self, working_dir: str, var_file: Optional[str] = None, auto_approve: bool = False) -> Dict[str, Any]:
+        """
+        Run terraform apply in the specified directory.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            var_file: Optional variables file
+            auto_approve: Whether to automatically approve the apply
+            
+        Returns:
+            Apply execution result
+        """
+        cmd = ['apply', '-no-color']
+        
+        if auto_approve:
+            cmd.append('-auto-approve')
+        
+        if var_file:
+            cmd.extend(['-var-file', var_file])
+        
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def destroy_terraform(self, working_dir: str, var_file: Optional[str] = None, auto_approve: bool = False) -> Dict[str, Any]:
+        """
+        Run terraform destroy in the specified directory.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            var_file: Optional variables file
+            auto_approve: Whether to automatically approve the destroy
+            
+        Returns:
+            Destroy execution result
+        """
+        cmd = ['destroy', '-no-color']
+        
+        if auto_approve:
+            cmd.append('-auto-approve')
+        
+        if var_file:
+            cmd.extend(['-var-file', var_file])
+        
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def refresh_terraform(self, working_dir: str, var_file: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Run terraform refresh in the specified directory.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            var_file: Optional variables file
+            
+        Returns:
+            Refresh execution result
+        """
+        cmd = ['refresh', '-no-color']
+        
+        if var_file:
+            cmd.extend(['-var-file', var_file])
+        
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def show_terraform(self, working_dir: str, state_file: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Run terraform show in the specified directory.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            state_file: Optional state file to show
+            
+        Returns:
+            Show execution result
+        """
+        cmd = ['show', '-no-color']
+        
+        if state_file:
+            cmd.append(state_file)
+        
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def output_terraform(self, working_dir: str, output_name: Optional[str] = None, json_format: bool = False) -> Dict[str, Any]:
+        """
+        Run terraform output in the specified directory.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            output_name: Optional specific output to retrieve
+            json_format: Whether to return output in JSON format
+            
+        Returns:
+            Output execution result
+        """
+        cmd = ['output', '-no-color']
+        
+        if json_format:
+            cmd.append('-json')
+        
+        if output_name:
+            cmd.append(output_name)
+        
+        return await self._run_terraform_command(cmd, working_dir)
+    
+    async def workspace_list(self, working_dir: str) -> Dict[str, Any]:
+        """
+        List Terraform workspaces.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            
+        Returns:
+            Workspace list result
+        """
+        return await self._run_terraform_command(['workspace', 'list'], working_dir)
+    
+    async def workspace_select(self, working_dir: str, workspace_name: str) -> Dict[str, Any]:
+        """
+        Select a Terraform workspace.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            workspace_name: Name of the workspace to select
+            
+        Returns:
+            Workspace selection result
+        """
+        return await self._run_terraform_command(['workspace', 'select', workspace_name], working_dir)
+    
+    async def workspace_new(self, working_dir: str, workspace_name: str) -> Dict[str, Any]:
+        """
+        Create a new Terraform workspace.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            workspace_name: Name of the new workspace
+            
+        Returns:
+            Workspace creation result
+        """
+        return await self._run_terraform_command(['workspace', 'new', workspace_name], working_dir)
+    
+    async def state_list(self, working_dir: str) -> Dict[str, Any]:
+        """
+        List resources in Terraform state.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            
+        Returns:
+            State list result
+        """
+        return await self._run_terraform_command(['state', 'list'], working_dir)
+    
+    async def state_show(self, working_dir: str, resource_address: str) -> Dict[str, Any]:
+        """
+        Show a specific resource in Terraform state.
+        
+        Args:
+            working_dir: Directory containing Terraform files
+            resource_address: Address of the resource to show
+            
+        Returns:
+            State show result
+        """
+        return await self._run_terraform_command(['state', 'show', resource_address], working_dir)
+    
+    async def execute_with_hcl_content(self, command: str, hcl_content: str, var_file_content: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+        """
+        Execute a Terraform command with provided HCL content in a temporary directory.
+        
+        Args:
+            command: Terraform command to execute ('init', 'plan', 'apply', etc.)
+            hcl_content: HCL content to write to main.tf
+            var_file_content: Optional content for terraform.tfvars
+            **kwargs: Additional arguments for the command
+            
+        Returns:
+            Command execution result
+        """
+        # Extract HCL from markdown if needed
+        extracted_hcl = extract_hcl_from_markdown(hcl_content)
+        if extracted_hcl:
+            hcl_content = extracted_hcl
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            try:
+                # Write HCL content to main.tf
+                main_tf = temp_path / "main.tf"
+                main_tf.write_text(hcl_content, encoding='utf-8')
+                
+                # Write variables file if provided
+                if var_file_content:
+                    tfvars = temp_path / "terraform.tfvars"
+                    tfvars.write_text(var_file_content, encoding='utf-8')
+                
+                # Execute the command based on type
+                if command == 'init':
+                    return await self.init_terraform(str(temp_path), **kwargs)
+                elif command == 'plan':
+                    var_file = "terraform.tfvars" if var_file_content else None
+                    return await self.plan_terraform(str(temp_path), var_file)
+                elif command == 'apply':
+                    var_file = "terraform.tfvars" if var_file_content else None
+                    return await self.apply_terraform(str(temp_path), var_file, **kwargs)
+                elif command == 'destroy':
+                    var_file = "terraform.tfvars" if var_file_content else None
+                    return await self.destroy_terraform(str(temp_path), var_file, **kwargs)
+                elif command == 'validate':
+                    # For validate, we need to init first
+                    init_result = await self.init_terraform(str(temp_path))
+                    if init_result['exit_code'] != 0:
+                        return init_result
+                    return await self._run_terraform_command(['validate'], str(temp_path))
+                elif command == 'fmt':
+                    return await self._run_terraform_command(['fmt', '-check'], str(temp_path))
+                elif command == 'show':
+                    return await self.show_terraform(str(temp_path))
+                elif command == 'output':
+                    return await self.output_terraform(str(temp_path), **kwargs)
+                else:
+                    return {
+                        'exit_code': -1,
+                        'stdout': '',
+                        'stderr': f'Unsupported command: {command}',
+                        'command': command
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error executing Terraform command {command}: {e}")
+                return {
+                    'exit_code': -1,
+                    'stdout': '',
+                    'stderr': str(e),
+                    'command': command
+                }
     
     async def _run_terraform_command(self, cmd: List[str], working_dir: str) -> Dict[str, Any]:
         """

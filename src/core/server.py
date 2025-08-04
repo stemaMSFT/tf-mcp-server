@@ -14,7 +14,8 @@ from core.models import (
     SecurityScanResult
 )
 from tools.documentation import get_documentation_provider
-from tools.validation import get_hcl_validator, get_security_validator
+from tools.terraform_runner import get_terraform_runner
+from tools.security_rules import get_azure_security_validator
 from tools.best_practices import get_best_practices_provider
 
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ def create_server(config: Config) -> FastMCP:
     
     # Get service instances
     doc_provider = get_documentation_provider()
-    hcl_validator = get_hcl_validator()
-    security_validator = get_security_validator()
+    terraform_runner = get_terraform_runner()
+    security_validator = get_azure_security_validator()
     best_practices = get_best_practices_provider()
     
     # ==========================================
@@ -147,21 +148,101 @@ def create_server(config: Config) -> FastMCP:
         return await doc_provider.search_azurerm_provider_docs(resource_type, search_query)
     
     # ==========================================
-    # VALIDATION TOOLS
+    # TERRAFORM COMMAND TOOLS
     # ==========================================
     
-    @mcp.tool("terraform_hcl_code_validator")
-    async def validate_hcl_code(hcl_content: str) -> str:
+    @mcp.tool("run_terraform_command")
+    async def run_terraform_command(
+        command: str = Field(..., description="Terraform command to execute (init, plan, apply, destroy, validate, fmt)"),
+        hcl_content: str = Field(..., description="HCL content to execute the command against"),
+        var_file_content: str = Field("", description="Optional Terraform variables content (terraform.tfvars format)"),
+        auto_approve: bool = Field(False, description="Auto-approve for apply/destroy commands (USE WITH CAUTION!)"),
+        upgrade: bool = Field(False, description="Upgrade providers/modules for init command")
+    ) -> Dict[str, Any]:
         """
-        Validate HCL (HashiCorp Configuration Language) code and return validation errors if any.
+        Execute any Terraform command with provided HCL content.
+        
+        This unified tool replaces individual terraform_init, terraform_plan, terraform_apply, 
+        terraform_destroy, terraform_format, and terraform_execute_command tools.
         
         Args:
-            hcl_content: The HCL code content to validate. Can contain code blocks with ```hcl markers.
+            command: Terraform command to execute:
+                - 'init': Initialize Terraform working directory
+                - 'plan': Show execution plan for changes
+                - 'apply': Apply changes to create/update resources
+                - 'destroy': Destroy Terraform-managed resources
+                - 'validate': Validate configuration files
+                - 'fmt': Format configuration files
+            hcl_content: HCL content to execute the command against
+            var_file_content: Optional Terraform variables content
+            auto_approve: Auto-approve for destructive operations (apply/destroy)
+            upgrade: Upgrade providers/modules during init
             
         Returns:
-            Validation result - either "Valid HCL code" or detailed error messages.
+            Command execution result with details based on command type:
+            - For 'fmt': Returns formatted HCL content as string
+            - For others: Returns Dict with exit_code, stdout, stderr, and command-specific data
         """
-        return await hcl_validator.validate_hcl_code(hcl_content)
+        vars_content = var_file_content if var_file_content.strip() else None
+        
+        # Handle format command separately as it returns formatted content
+        if command == 'fmt':
+            formatted_content = await terraform_runner.format_hcl_code(hcl_content)
+            return {
+                "command": "fmt",
+                "success": True,
+                "formatted_content": formatted_content,
+                "exit_code": 0,
+                "stdout": "Successfully formatted HCL content",
+                "stderr": ""
+            }
+        
+        # Handle other commands using the unified execution method
+        kwargs = {}
+        if command in ['apply', 'destroy'] and auto_approve:
+            kwargs['auto_approve'] = auto_approve
+        elif command == 'init' and upgrade:
+            kwargs['upgrade'] = upgrade
+        
+        try:
+            # Use the existing execute_terraform_command method
+            result = await terraform_runner.execute_terraform_command(command, hcl_content, vars_content, **kwargs)
+            
+            # Ensure result is a dictionary
+            if isinstance(result, str):
+                # If the validator returns a string, wrap it in a proper response
+                return {
+                    "command": command,
+                    "success": True,
+                    "output": result,
+                    "exit_code": 0,
+                    "stdout": result,
+                    "stderr": ""
+                }
+            elif isinstance(result, dict):
+                # Add command info to the result
+                result["command"] = command
+                return result
+            else:
+                # Fallback for unexpected return types
+                return {
+                    "command": command,
+                    "success": False,
+                    "output": str(result),
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": f"Unexpected result type: {type(result)}"
+                }
+                
+        except Exception as e:
+            return {
+                "command": command,
+                "success": False,
+                "error": str(e),
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": str(e)
+            }
     
     @mcp.tool("run_azure_security_scan")
     async def run_security_scan(hcl_content: str) -> SecurityScanResult:
