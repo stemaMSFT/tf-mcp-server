@@ -37,7 +37,25 @@ Thank you for your interest in contributing to the Azure Terraform MCP Server! T
 
 ## Development Setup
 
-### 1. Create Virtual Environment
+### Option 1: Using UV (Recommended)
+
+```bash
+# Install UV if not already installed
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies and create virtual environment
+uv sync --dev
+
+# Run the server
+uv run tf-mcp-server
+```
+
+### Option 2: Traditional Python Setup
+
 ```bash
 # Create virtual environment
 python -m venv venv
@@ -47,10 +65,7 @@ python -m venv venv
 venv\Scripts\activate
 # Unix/macOS
 source venv/bin/activate
-```
 
-### 2. Install Dependencies
-```bash
 # Install development dependencies
 pip install -r requirements-dev.txt
 
@@ -68,12 +83,44 @@ MCP_DEBUG=true
 
 ### 4. Verify Installation
 ```bash
-# Run the server to verify setup
-python -m src
+# Using UV
+uv run tf-mcp-server
 
-# Run tests (if available)
+# Or using Python module
+python -m tf_mcp_server
+
+# With debug logging
+MCP_DEBUG=true uv run tf-mcp-server
+
+# Run tests
 pytest tests/
+
+# Run tests with coverage
+pytest --cov=src/tf_mcp_server tests/
 ```
+
+### Development Server Configuration
+
+The server can be configured using environment variables:
+
+```bash
+# Server settings
+export MCP_HOST=localhost      # Default: localhost
+export MCP_PORT=6801          # Default: 6801
+export MCP_DEBUG=true         # Enable debug logging
+
+# Run with custom configuration
+uv run tf-mcp-server
+```
+
+### Debugging
+
+For debugging issues:
+
+1. **Enable debug logging**: Set `MCP_DEBUG=true`
+2. **Check log file**: Look at `tf-mcp-server.log` for detailed logs
+3. **Use pytest for testing**: Run individual tests with `-v` for verbose output
+4. **Test MCP tools individually**: Use the examples in README.md
 
 ## Code Standards
 
@@ -87,13 +134,13 @@ pytest tests/
 ### Code Formatting
 ```bash
 # Format code with black
-black src/ tests/
+black src/tf_mcp_server/ tests/
 
 # Sort imports
-isort src/ tests/
+isort src/tf_mcp_server/ tests/
 
 # Check formatting
-black --check src/ tests/
+black --check src/tf_mcp_server/ tests/
 ```
 
 ### Documentation
@@ -146,26 +193,39 @@ pytest -v
 ### Test Structure Example
 ```python
 import pytest
-from src.tools.validation import terraform_hcl_code_validator
+from src.tf_mcp_server.tools.terraform_runner import get_terraform_runner
 
-class TestTerraformValidator:
-    """Test cases for Terraform HCL validation."""
+class TestTerraformRunner:
+    """Test cases for Terraform command execution."""
     
-    def test_valid_hcl_code(self):
+    @pytest.mark.asyncio
+    async def test_terraform_format(self):
+        """Test HCL code formatting."""
+        unformatted_hcl = 'resource"azurerm_storage_account""example"{name="test"}'
+        
+        runner = get_terraform_runner()
+        formatted = await runner.format_hcl_code(unformatted_hcl)
+        
+        assert 'resource "azurerm_storage_account" "example"' in formatted
+        assert formatted != unformatted_hcl
+    
+    @pytest.mark.asyncio
+    async def test_terraform_validate_valid_hcl(self):
         """Test validation of valid HCL code."""
         valid_hcl = '''
         resource "azurerm_storage_account" "example" {
-          name = "mystorageaccount"
+          name                     = "mystorageaccount"
+          resource_group_name      = "myresourcegroup"
+          location                 = "East US"
+          account_tier             = "Standard"
+          account_replication_type = "LRS"
         }
         '''
-        result = terraform_hcl_code_validator(valid_hcl)
-        assert "Valid HCL code" in result
-    
-    def test_invalid_hcl_code(self):
-        """Test validation of invalid HCL code."""
-        invalid_hcl = "invalid { syntax"
-        result = terraform_hcl_code_validator(invalid_hcl)
-        assert "Error" in result
+        
+        runner = get_terraform_runner()
+        result = await runner.execute_terraform_command("validate", valid_hcl)
+        
+        assert result["exit_code"] == 0
 ```
 
 ## Pull Request Process
@@ -192,8 +252,8 @@ class TestTerraformValidator:
 4. **Run tests and formatting**:
    ```bash
    pytest
-   black src/ tests/
-   isort src/ tests/
+   black src/tf_mcp_server/ tests/
+   isort src/tf_mcp_server/ tests/
    ```
 
 ### Commit Message Format
@@ -274,7 +334,7 @@ Include:
 
 ### Adding New MCP Tools
 
-1. **Define the tool** in `src/core/server.py`:
+1. **Define the tool** in `src/tf_mcp_server/core/server.py`:
 ```python
 @mcp.tool("your_new_tool")
 async def your_new_tool(
@@ -287,7 +347,7 @@ async def your_new_tool(
 
 2. **Implement functionality** in appropriate module:
 ```python
-# src/tools/your_module.py
+# src/tf_mcp_server/tools/your_module.py
 async def tool_implementation(param: str) -> Dict[str, Any]:
     """Implementation details."""
     # Your logic here
@@ -297,7 +357,8 @@ async def tool_implementation(param: str) -> Dict[str, Any]:
 3. **Add tests** in `tests/`:
 ```python
 # tests/test_your_module.py
-def test_your_new_tool():
+@pytest.mark.asyncio
+async def test_your_new_tool():
     """Test the new tool functionality."""
     # Test implementation
 ```
@@ -307,13 +368,33 @@ def test_your_new_tool():
    - Include usage examples
    - Update API documentation
 
+### Current MCP Tools
+
+The server currently provides these MCP tools:
+
+**Documentation Tools:**
+- `azurerm_terraform_documentation_retriever` - Get AzureRM resource/data source docs
+- `azapi_terraform_documentation_retriever` - Get AzAPI resource schemas
+- `search_azurerm_provider_docs` - Search Azure provider documentation
+- `azurerm_datasource_documentation_retriever` - (Deprecated) Use main retriever instead
+
+**Terraform Command Tools:**
+- `run_terraform_command` - Execute any Terraform command (init, plan, apply, destroy, validate, fmt)
+
+**Security & Analysis Tools:**
+- `run_azure_security_scan` - Scan configurations for security issues
+- `get_azure_best_practices` - Get resource-specific best practices
+- `analyze_azure_resources` - Analyze resources in Terraform configurations
+
+When adding new tools, follow the established patterns and ensure they integrate well with existing functionality.
+
 ### Working with Azure Resources
 
 When adding support for new Azure resources:
 
 1. **Research the resource** in Azure documentation
 2. **Check existing patterns** in the codebase
-3. **Add schema information** to `data/azapi_schemas.json` if needed
+3. **Add schema information** to `src/tf_mcp_server/data/azapi_schemas.json` if needed
 4. **Update security scanning rules** if applicable
 5. **Add best practices** for the resource type
 
@@ -324,6 +405,21 @@ When adding support for new Azure resources:
 - Minimize external API calls
 - Use efficient data structures
 - Profile code for performance bottlenecks
+
+### Project Structure Notes
+
+The project uses:
+- **UV** for dependency management and virtual environments (recommended)
+- **FastMCP** framework for the Model Context Protocol server
+- **Async/await** pattern throughout for better performance
+- **Pydantic** for data validation and serialization
+- **pytest** with async support for testing
+
+Key directories:
+- `src/tf_mcp_server/core/` - Core server functionality
+- `src/tf_mcp_server/tools/` - Individual tool implementations
+- `src/tf_mcp_server/data/` - Static data files (schemas, etc.)
+- `tests/` - Test files matching the source structure
 
 ## Adding New Features
 

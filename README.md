@@ -25,7 +25,9 @@ This MCP server provides support for Azure Terraform development, including:
 - **Best Practices**: Azure-specific best practices and recommendations
 
 ### 🔧 Development Tools
+- **Unified Terraform Commands**: Single tool to execute all Terraform commands (init, plan, apply, destroy, validate, fmt)
 - **HCL Validation**: Syntax validation and error reporting for Terraform code
+- **HCL Formatting**: Automatic code formatting for Terraform configurations
 - **Resource Analysis**: Analyze Azure resources in Terraform configurations
 
 ### 🚀 Integration
@@ -114,10 +116,13 @@ MCP_DEBUG=false
 ### Starting the Server
 
 ```bash
-# Using the package entry point
-python -m src
+# Using UV (recommended)
+uv run tf-mcp-server
 
-# Using the main script
+# Using the package entry point
+python -m tf_mcp_server
+
+# Using the main script (legacy)
 python main.py
 ```
 
@@ -128,13 +133,12 @@ The server will start on `http://localhost:6801` by default.
 The server provides the following MCP tools:
 
 #### Documentation Tools
-- **`azurerm_terraform_documentation_retriever`**: Retrieve specific AzureRM resource documentation
-- **`azurerm_datasource_documentation_retriever`**: Retrieve specific AzureRM data source documentation
+- **`azurerm_terraform_documentation_retriever`**: Retrieve specific AzureRM resource or data source documentation with optional argument/attribute lookup
 - **`azapi_terraform_documentation_retriever`**: Retrieve AzAPI resource schemas and documentation
 - **`search_azurerm_provider_docs`**: Search Azure provider documentation for both resources and data sources with optional filtering
 
-#### Validation Tools
-- **`terraform_hcl_code_validator`**: Validate HCL code syntax and structure
+#### Terraform Command Tools
+- **`run_terraform_command`**: Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
 
 #### Security Tools
 - **`run_azure_security_scan`**: Run security scans on Terraform configurations
@@ -147,20 +151,59 @@ The server provides the following MCP tools:
 
 ### Example Usage
 
-#### Validate HCL Code
+#### Execute Terraform Commands
 ```python
-# Using the MCP tool
+# Initialize Terraform with HCL content
 {
-  "tool": "terraform_hcl_code_validator",
+  "tool": "run_terraform_command",
   "arguments": {
+    "command": "init",
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "upgrade": true
+  }
+}
+
+# Validate HCL code
+{
+  "tool": "run_terraform_command",
+  "arguments": {
+    "command": "validate",
     "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}"
+  }
+}
+
+# Format HCL code
+{
+  "tool": "run_terraform_command",
+  "arguments": {
+    "command": "fmt",
+    "hcl_content": "resource\"azurerm_storage_account\"\"example\"{\nname=\"mystorageaccount\"\n}"
   }
 }
 ```
 
 #### Get Documentation
 ```python
-# Using the MCP tool
+# Get detailed resource documentation
+{
+  "tool": "azurerm_terraform_documentation_retriever",
+  "arguments": {
+    "resource_type_name": "storage_account",
+    "doc_type": "resource"
+  }
+}
+
+# Get specific argument details
+{
+  "tool": "azurerm_terraform_documentation_retriever",
+  "arguments": {
+    "resource_type_name": "storage_account",
+    "doc_type": "resource",
+    "argument_name": "account_tier"
+  }
+}
+
+# Search provider documentation
 {
   "tool": "search_azurerm_provider_docs",
   "arguments": {
@@ -172,7 +215,16 @@ The server provides the following MCP tools:
 
 #### Get Data Source Documentation
 ```python
-# Using the MCP tool for data sources
+# Using the main documentation tool for data sources
+{
+  "tool": "azurerm_terraform_documentation_retriever",
+  "arguments": {
+    "resource_type_name": "virtual_machine",
+    "doc_type": "data-source"
+  }
+}
+
+# Or search data source documentation
 {
   "tool": "search_azurerm_provider_docs",
   "arguments": {
@@ -180,12 +232,67 @@ The server provides the following MCP tools:
     "doc_type": "data-source"
   }
 }
+```
 
-# Or use the dedicated data source tool
+#### Security Scanning
+```python
+# Run security scan on Terraform configuration
 {
-  "tool": "azurerm_datasource_documentation_retriever",
+  "tool": "run_azure_security_scan",
   "arguments": {
-    "resource_type_name": "virtual_machine"
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  enable_https_traffic_only = false\n}"
+  }
+}
+```
+
+#### Get Best Practices
+```python
+# Get all best practices for storage accounts
+{
+  "tool": "get_azure_best_practices",
+  "arguments": {
+    "resource_type": "storage_account",
+    "category": "all"
+  }
+}
+
+# Get security-specific best practices
+{
+  "tool": "get_azure_best_practices",
+  "arguments": {
+    "resource_type": "storage_account",
+    "category": "security"
+  }
+}
+
+# Get performance best practices
+{
+  "tool": "get_azure_best_practices",
+  "arguments": {
+    "resource_type": "virtual_machine",
+    "category": "performance"
+  }
+}
+```
+
+#### AzAPI Documentation
+```python
+# Get AzAPI resource schema
+{
+  "tool": "azapi_terraform_documentation_retriever",
+  "arguments": {
+    "resource_type_name": "Microsoft.Storage/storageAccounts@2021-04-01"
+  }
+}
+```
+
+#### Analyze Azure Resources
+```python
+# Analyze Terraform configuration for Azure resources
+{
+  "tool": "analyze_azure_resources",
+  "arguments": {
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n}\n\nresource \"azurerm_virtual_machine\" \"example\" {\n  name = \"myvm\"\n  resource_group_name = \"myresourcegroup\"\n}"
   }
 }
 ```
@@ -206,30 +313,41 @@ The server provides the following MCP tools:
 
 ```
 tf-mcp-server/
-├── src/                        # Main package
-│   ├── __init__.py
-│   ├── __main__.py             # Package entry point
-│   ├── core/                   # Core functionality
-│   │   ├── __init__.py
-│   │   ├── config.py           # Configuration management
-│   │   ├── models.py           # Data models
-│   │   ├── server.py           # FastMCP server implementation
-│   │   ├── terraform_executor.py    # Terraform execution utilities
-│   │   └── utils.py            # Utility functions
-│   └── tools/                  # Tool implementations
+├── src/                            # Main package
+│   └── tf_mcp_server/              # Core package
 │       ├── __init__.py
-│       ├── best_practices.py   # Best practices provider
-│       ├── documentation.py    # Documentation tools
-│       └── validation.py       # Validation tools
-├── data/                       # Data files
-│   └── azapi_schemas.json      # AzAPI schemas
-├── tests/                      # Test suite
-├── tfsample/                   # Sample Terraform files
-├── main.py                     # Main entry point
-├── pyproject.toml              # Project configuration
-├── requirements.txt            # Dependencies
-├── requirements-dev.txt        # Development dependencies
-└── README.md                   # This file
+│       ├── __main__.py             # Package entry point
+│       ├── launcher.py             # Server launcher
+│       ├── core/                   # Core functionality
+│       │   ├── __init__.py
+│       │   ├── config.py           # Configuration management
+│       │   ├── models.py           # Data models
+│       │   ├── server.py           # FastMCP server implementation
+│       │   ├── terraform_executor.py    # Terraform execution utilities
+│       │   └── utils.py            # Utility functions
+│       ├── tools/                  # Tool implementations
+│       │   ├── __init__.py
+│       │   ├── azapi_docs_provider.py    # AzAPI documentation provider
+│       │   ├── azurerm_docs_provider.py # AzureRM documentation provider
+│       │   ├── best_practices.py   # Best practices provider
+│       │   ├── security_rules.py   # Security validation rules
+│       │   └── terraform_runner.py # Terraform command runner
+│       └── data/                   # Data files
+│           └── azapi_schemas.json  # AzAPI schemas
+├── tests/                          # Test suite
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_azurerm_docs_provider.py
+│   ├── test_datasource.py
+│   ├── test_detailed_attributes.py
+│   ├── test_summaries.py
+│   └── test_utils.py
+├── scripts/                        # Utility scripts
+├── main.py                         # Legacy entry point
+├── pyproject.toml                  # Project configuration (UV/pip)
+├── uv.lock                         # UV lockfile
+├── README.md                       # This file
+└── CONTRIBUTE.md                   # Contributing guidelines
 ```
 
 ## Development
@@ -241,7 +359,10 @@ tf-mcp-server/
 git clone <repository-url>
 cd tf-mcp-server
 
-# Install development dependencies
+# Using UV (recommended)
+uv sync --dev
+
+# Or using traditional pip
 pip install -r requirements-dev.txt
 
 # Install in development mode
@@ -252,12 +373,14 @@ pytest tests/
 
 # Run with debug logging
 export MCP_DEBUG=true
-python -m src
+uv run tf-mcp-server
+# or
+python -m tf_mcp_server
 ```
 
 ### Adding New Tools
 
-To add new MCP tools, extend the server in `src/core/server.py`:
+To add new MCP tools, extend the server in `src/tf_mcp_server/core/server.py`:
 
 ```python
 @mcp.tool("your_new_tool")
