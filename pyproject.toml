@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "tf-mcp-server"
@@ -33,8 +33,20 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
-[project.optional-dependencies]
-dev = [
+[project.urls]
+Homepage = "https://github.com/example/tf-mcp-server"
+Repository = "https://github.com/example/tf-mcp-server"
+Documentation = "https://github.com/example/tf-mcp-server/blob/main/README.md"
+"Bug Tracker" = "https://github.com/example/tf-mcp-server/issues"
+
+[project.scripts]
+tf-mcp-server = "tf_mcp_server.launcher:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tf_mcp_server"]
+
+[tool.uv]
+dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
@@ -43,20 +55,7 @@ dev = [
     "pre-commit>=3.0.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/example/tf-mcp-server"
-Repository = "https://github.com/example/tf-mcp-server"
-Documentation = "https://github.com/example/tf-mcp-server/blob/main/README.md"
-"Bug Tracker" = "https://github.com/example/tf-mcp-server/issues"
-
-[project.scripts]
-tf-mcp-server = "src.__main__:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"src" = ["data/*.json"]
+[tool.uv.sources]
 
 [tool.black]
 line-length = 100

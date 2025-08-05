@@ -7,16 +7,16 @@ from typing import Dict, Any
 from pydantic import Field
 from fastmcp import FastMCP
 
-from core.config import Config
-from core.models import (
+from .config import Config
+from .models import (
     TerraformAzureProviderDocsResult,
     SecurityScanResult
 )
-from tools.azurerm_docs_provider import get_azurerm_documentation_provider
-from tools.azapi_docs_provider import get_azapi_documentation_provider
-from tools.terraform_runner import get_terraform_runner
-from tools.security_rules import get_azure_security_validator
-from tools.best_practices import get_best_practices_provider
+from ..tools.azurerm_docs_provider import get_azurerm_documentation_provider
+from ..tools.azapi_docs_provider import get_azapi_documentation_provider
+from ..tools.terraform_runner import get_terraform_runner
+from ..tools.security_rules import get_azure_security_validator
+from ..tools.best_practices import get_best_practices_provider
 
 logger = logging.getLogger(__name__)
 

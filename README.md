@@ -36,25 +36,58 @@ This MCP server provides support for Azure Terraform development, including:
 
 ### Prerequisites
 - Python 3.11 or higher
-- pip (Python package manager)
+- [UV](https://docs.astral.sh/uv/) (recommended) or pip
 
-### Quick Start
+### Quick Start with UV (Recommended)
+
+1. **Install UV** (if not already installed):
+   ```bash
+   # On Windows
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   
+   # On macOS/Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Clone and Setup**:
+   ```bash
+   git clone <repository-url>
+   cd tf-mcp-server
+   
+   # Install dependencies and create virtual environment
+   uv sync
+   
+   # Run the server
+   uv run tf-mcp-server
+   ```
+
+3. **Development Setup**:
+   ```bash
+   # Install with development dependencies
+   uv sync --dev
+   
+   # Run tests
+   uv run pytest
+   
+   # Format code
+   uv run black .
+   
+   # Run linting
+   uv run flake8
+   ```
+
+### Alternative: Traditional pip Installation
 
 1. **Clone and Setup**:
    ```bash
    git clone <repository-url>
    cd tf-mcp-server
    
-   # Install dependencies
-   pip install -r requirements.txt
-   ```
-
-2. **Optional Dependencies**:
-   ```bash
-   # For development (optional)
-   pip install -r requirements-dev.txt
+   # Create virtual environment
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    
-   # Install in development mode (optional)
+   # Install the package
    pip install -e .
    ```
 
