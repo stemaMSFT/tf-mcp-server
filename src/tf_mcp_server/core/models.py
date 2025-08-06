@@ -24,6 +24,7 @@ class TerraformAzureProviderDocsResult(BaseModel):
     arguments: List[ArgumentDetail] = Field(default_factory=list, description="Resource arguments")
     attributes: List[Dict[str, str]] = Field(default_factory=list, description="Resource attributes")
     examples: List[str] = Field(default_factory=list, description="Usage examples")
+    notes: List[str] = Field(default_factory=list, description="Important notes and warnings from the documentation")
 
 
 class TerraformExecutionRequest(BaseModel):

@@ -81,6 +81,7 @@ class AzureRMDocumentationProvider:
                 arguments = self._extract_arguments(markdown_content, is_data_source)
                 attributes = self._extract_attributes(markdown_content)
                 examples = self._extract_examples(markdown_content, normalized_type, is_data_source)
+                notes = self._extract_notes(markdown_content)
                 
                 return TerraformAzureProviderDocsResult(
                     resource_type=resource_type,
@@ -88,7 +89,8 @@ class AzureRMDocumentationProvider:
                     summary=summary,
                     arguments=arguments,
                     attributes=attributes,
-                    examples=examples
+                    examples=examples,
+                    notes=notes
                 )
                 
         except Exception as e:
@@ -98,7 +100,8 @@ class AzureRMDocumentationProvider:
                 summary=f"Error retrieving documentation: {str(e)}",
                 arguments=[],
                 attributes=[],
-                examples=[]
+                examples=[],
+                notes=[]
             )
     
     def _extract_summary(self, markdown_content: str, resource_type: str, is_data_source: bool = False) -> str:
@@ -505,6 +508,116 @@ output "{resource_name}_id" {{
 }}''')
         
         return examples
+    
+    def _extract_notes(self, markdown_content: str) -> List[str]:
+        """Extract note sections from the markdown documentation."""
+        notes = []
+        lines = markdown_content.split('\n')
+        
+        in_note_block = False
+        current_note = []
+        
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            
+            # Look for note indicators - various patterns used in Terraform docs
+            note_patterns = [
+                r'^>\s*\*\*NOTE:?\*\*\s*(.*)$',  # > **NOTE:** content
+                r'^>\s*\*\*Note:?\*\*\s*(.*)$',  # > **Note:** content  
+                r'^>\s*NOTE:?\s*(.*)$',           # > NOTE: content
+                r'^>\s*Note:?\s*(.*)$',           # > Note: content
+                r'^->\s*\*\*NOTE:?\*\*\s*(.*)$', # -> **NOTE:** content
+                r'^->\s*\*\*Note:?\*\*\s*(.*)$', # -> **Note:** content
+                r'^->\s*NOTE:?\s*(.*)$',          # -> NOTE: content
+                r'^->\s*Note:?\s*(.*)$',          # -> Note: content
+                r'^~>\s*\*\*NOTE:?\*\*\s*(.*)$', # ~> **NOTE:** content
+                r'^~>\s*\*\*Note:?\*\*\s*(.*)$', # ~> **Note:** content
+                r'^~>\s*NOTE:?\s*(.*)$',          # ~> NOTE: content
+                r'^~>\s*Note:?\s*(.*)$',          # ~> Note: content
+                r'^\*\*NOTE:?\*\*\s*(.*)$',      # **NOTE:** content
+                r'^\*\*Note:?\*\*\s*(.*)$',      # **Note:** content
+                r'^NOTE:?\s*(.*)$',               # NOTE: content
+                r'^Note:?\s*(.*)$'                # Note: content
+            ]
+            
+            # Check if this line starts a note
+            note_match = None
+            for pattern in note_patterns:
+                match = re.match(pattern, line_stripped, re.IGNORECASE)
+                if match:
+                    note_match = match
+                    break
+            
+            if note_match:
+                # Starting a new note
+                if current_note:
+                    # Save previous note if exists
+                    note_text = ' '.join(current_note).strip()
+                    if note_text:
+                        notes.append(note_text)
+                
+                # Start new note with the content after the note indicator
+                note_content = note_match.group(1).strip() if note_match.lastindex else ""
+                current_note = [note_content] if note_content else []
+                in_note_block = True
+                continue
+            
+            # Check if we're continuing a note block (starts with >, ->, ~>, or indented)
+            if in_note_block:
+                if (line_stripped.startswith('>') or line_stripped.startswith('->') or line_stripped.startswith('~>') or
+                    (line_stripped and line.startswith('  ') and not line_stripped.startswith('*')) or
+                    (line_stripped and not line_stripped.startswith('#') and not line_stripped.startswith('*') and 
+                     not line_stripped.startswith('-') and len(line_stripped) < 100)):
+                    
+                    # Continue the note - clean up markdown formatting
+                    clean_line = line_stripped.lstrip('~> ').lstrip('-> ').lstrip('> ').strip()
+                    if clean_line:
+                        current_note.append(clean_line)
+                    continue
+                else:
+                    # End of note block
+                    if current_note:
+                        note_text = ' '.join(current_note).strip()
+                        if note_text:
+                            notes.append(note_text)
+                        current_note = []
+                    in_note_block = False
+            
+            # Look for blockquote-style notes (multiple lines starting with >, ->, or ~>)
+            if (line_stripped.startswith('>') or line_stripped.startswith('->') or line_stripped.startswith('~>')) and not in_note_block:
+                # Check if this might be a note by looking for note keywords
+                clean_content = line_stripped.lstrip('~> ').lstrip('-> ').lstrip('> ').strip().lower()
+                if any(keyword in clean_content for keyword in ['note', 'important', 'warning', 'caution']):
+                    # Start collecting this as a potential note
+                    clean_line = line_stripped.lstrip('~> ').lstrip('-> ').lstrip('> ').strip()
+                    if clean_line:
+                        current_note = [clean_line]
+                        in_note_block = True
+        
+        # Handle the last note if exists
+        if current_note:
+            note_text = ' '.join(current_note).strip()
+            if note_text:
+                notes.append(note_text)
+        
+        # Clean up notes - remove markdown formatting and duplicates
+        cleaned_notes = []
+        seen_notes = set()
+        
+        for note in notes:
+            # Remove markdown formatting
+            cleaned_note = re.sub(r'\*\*(.*?)\*\*', r'\1', note)  # Remove **bold**
+            cleaned_note = re.sub(r'\*(.*?)\*', r'\1', cleaned_note)  # Remove *italic*
+            cleaned_note = re.sub(r'`(.*?)`', r'\1', cleaned_note)  # Remove `code`
+            cleaned_note = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', cleaned_note)  # Remove [text](link)
+            cleaned_note = cleaned_note.strip()
+            
+            # Skip very short notes or duplicates
+            if len(cleaned_note) > 10 and cleaned_note.lower() not in seen_notes:
+                cleaned_notes.append(cleaned_note)
+                seen_notes.add(cleaned_note.lower())
+        
+        return cleaned_notes
 
 
 # Global instance

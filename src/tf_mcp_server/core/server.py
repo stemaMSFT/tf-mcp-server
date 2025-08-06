@@ -125,7 +125,8 @@ def create_server(config: Config) -> FastMCP:
                 "documentation_url": result.documentation_url,
                 "arguments": [],
                 "attributes": [],
-                "examples": result.examples if result.examples else []
+                "examples": result.examples if result.examples else [],
+                "notes": result.notes if result.notes else []
             }
             
             # Add arguments
