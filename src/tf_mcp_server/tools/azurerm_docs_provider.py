@@ -184,8 +184,13 @@ class AzureRMDocumentationProvider:
                     # Determine if required
                     required = "(Required)" in description or "(required)" in description
                     
+                    # Clean up description by removing required/optional indicators
+                    cleaned_description = re.sub(r'\s*\((?:Required|Optional)\)\s*[-–—]?\s*', '', description, flags=re.IGNORECASE).strip()
+                    # Remove leading dash if it remains after cleanup
+                    cleaned_description = re.sub(r'^[-–—]\s*', '', cleaned_description).strip()
+                    
                     # Determine if this is a block argument
-                    is_block = "block" in description.lower()
+                    is_block = "block" in cleaned_description.lower()
                     
                     # Determine type
                     if is_block:
@@ -195,7 +200,7 @@ class AzureRMDocumentationProvider:
                     
                     arg_detail = ArgumentDetail(
                         name=arg_name,
-                        description=description,
+                        description=cleaned_description,
                         required=required,
                         type=arg_type,
                         block_arguments=[] if is_block else None
@@ -305,12 +310,17 @@ class AzureRMDocumentationProvider:
                     # Determine if required
                     required = "(Required)" in description or "(required)" in description
                     
+                    # Clean up description by removing required/optional indicators
+                    cleaned_description = re.sub(r'\s*\((?:Required|Optional)\)\s*[-–—]?\s*', '', description, flags=re.IGNORECASE).strip()
+                    # Remove leading dash if it remains after cleanup
+                    cleaned_description = re.sub(r'^[-–—]\s*', '', cleaned_description).strip()
+                    
                     # Determine if this nested argument is also a block
-                    is_nested_block = "block" in description.lower()
+                    is_nested_block = "block" in cleaned_description.lower()
                     
                     arg_detail = ArgumentDetail(
                         name=arg_name,
-                        description=description,
+                        description=cleaned_description,
                         required=required,
                         type="Block" if is_nested_block else "Single",
                         block_arguments=[] if is_nested_block else None

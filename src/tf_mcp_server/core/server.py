@@ -50,7 +50,7 @@ def create_server(config: Config) -> FastMCP:
         doc_type: str = Field("resource", description="Type of documentation: 'resource' for resources or 'data-source' for data sources"),
         argument_name: str = Field("", description="Specific argument name to retrieve details for (optional)"),
         attribute_name: str = Field("", description="Specific attribute name to retrieve details for (optional)")
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
         Retrieve documentation for a specific AzureRM resource type in Terraform.
         
@@ -61,7 +61,7 @@ def create_server(config: Config) -> FastMCP:
             attribute_name: Optional specific attribute name to get details for
             
         Returns:
-            The documentation for the specified AzureRM resource type, or specific argument/attribute details
+            JSON object with the documentation for the specified AzureRM resource type, or specific argument/attribute details
         """
         try:
             result = await azurerm_doc_provider.search_azurerm_provider_docs(resource_type_name, "", doc_type)
@@ -70,70 +70,103 @@ def create_server(config: Config) -> FastMCP:
             if argument_name:
                 for arg in result.arguments:
                     if arg.name.lower() == argument_name.lower():
-                        formatted_doc = f"# Argument: {arg.name}\n\n"
-                        formatted_doc += f"**Resource Type:** {result.resource_type}\n"
-                        formatted_doc += f"**Documentation Type:** {doc_type}\n\n"
-                        formatted_doc += f"**Description:** {arg.description}\n"
-                        formatted_doc += f"**Required:** {'Yes' if arg.required else 'No'}\n"
-                        formatted_doc += f"**Type:** {arg.type}\n\n"
+                        response_data = {
+                            "type": "argument",
+                            "name": arg.name,
+                            "resource_type": result.resource_type,
+                            "required": arg.required,
+                            "description": arg.description
+                        }
                         
                         if arg.block_arguments:
-                            formatted_doc += "## Block Arguments\n\n"
-                            for block_arg in arg.block_arguments:
-                                required = " (Required)" if block_arg.required else ""
-                                formatted_doc += f"- **{block_arg.name}**{required}: {block_arg.description}\n"
+                            response_data["block_arguments"] = [
+                                {
+                                    "name": block_arg.name,
+                                    "required": block_arg.required,
+                                    "description": block_arg.description
+                                }
+                                for block_arg in arg.block_arguments
+                            ]
                         
-                        formatted_doc += f"\n**Documentation URL:** {result.documentation_url}\n"
-                        return formatted_doc
+                        return response_data
                 
-                return f"Argument '{argument_name}' not found in {result.resource_type} documentation. Available arguments: {', '.join([arg.name for arg in result.arguments])}"
+                available_args = [arg.name for arg in result.arguments]
+                return {
+                    "error": f"Argument '{argument_name}' not found in {result.resource_type} documentation",
+                    "resource_type": result.resource_type,
+                    "available_arguments": available_args
+                }
             
             # If specific attribute requested
             if attribute_name:
                 for attr in result.attributes:
                     if attr['name'].lower() == attribute_name.lower():
-                        formatted_doc = f"# Attribute: {attr['name']}\n\n"
-                        formatted_doc += f"**Resource Type:** {result.resource_type}\n"
-                        formatted_doc += f"**Documentation Type:** {doc_type}\n\n"
-                        formatted_doc += f"**Description:** {attr['description']}\n\n"
-                        formatted_doc += f"**Documentation URL:** {result.documentation_url}\n"
-                        return formatted_doc
+                        return {
+                            "type": "attribute",
+                            "name": attr['name'],
+                            "resource_type": result.resource_type,
+                            "description": attr['description']
+                        }
                 
-                return f"Attribute '{attribute_name}' not found in {result.resource_type} documentation. Available attributes: {', '.join([attr['name'] for attr in result.attributes])}"
+                available_attrs = [attr['name'] for attr in result.attributes]
+                return {
+                    "error": f"Attribute '{attribute_name}' not found in {result.resource_type} documentation",
+                    "resource_type": result.resource_type,
+                    "available_attributes": available_attrs
+                }
             
-            # Format the full response
+            # Return full documentation as JSON
             doc_type_display = "Data Source" if doc_type.lower() in ["data-source", "datasource", "data_source"] else "Resource"
-            formatted_doc = f"# {result.resource_type} {doc_type_display} Documentation\n\n"
-            formatted_doc += f"**Summary:** {result.summary}\n\n"
-            formatted_doc += f"**Documentation URL:** {result.documentation_url}\n\n"
             
+            response_data = {
+                "resource_type": result.resource_type,
+                "doc_type": doc_type_display,
+                "summary": result.summary,
+                "documentation_url": result.documentation_url,
+                "arguments": [],
+                "attributes": [],
+                "examples": result.examples if result.examples else []
+            }
+            
+            # Add arguments
             if result.arguments:
-                formatted_doc += "## Arguments\n\n"
                 for arg in result.arguments:
-                    required = " (Required)" if arg.required else ""
-                    formatted_doc += f"- **{arg.name}**{required}: {arg.description}\n"
+                    arg_data = {
+                        "name": arg.name,
+                        "required": arg.required,
+                        "description": arg.description
+                    }
                     
-                    # Show block arguments if present
                     if arg.block_arguments:
-                        formatted_doc += f"  - Block type with {len(arg.block_arguments)} nested arguments\n"
-                formatted_doc += "\n"
+                        arg_data["block_arguments"] = [
+                            {
+                                "name": block_arg.name,
+                                "required": block_arg.required,
+                                "description": block_arg.description
+                            }
+                            for block_arg in arg.block_arguments
+                        ]
+                    
+                    response_data["arguments"].append(arg_data)
             
+            # Add attributes
             if result.attributes:
-                formatted_doc += "## Attributes\n\n"
-                for attr in result.attributes:
-                    formatted_doc += f"- **{attr['name']}**: {attr['description']}\n"
-                formatted_doc += "\n"
+                response_data["attributes"] = [
+                    {
+                        "name": attr['name'],
+                        "description": attr['description']
+                    }
+                    for attr in result.attributes
+                ]
             
-            if result.examples:
-                formatted_doc += "## Examples\n\n"
-                for i, example in enumerate(result.examples, 1):
-                    formatted_doc += f"### Example {i}\n\n```hcl\n{example}\n```\n\n"
-            
-            return formatted_doc
+            return response_data
             
         except Exception as e:
             logger.error(f"Error retrieving AzureRM documentation: {e}")
-            return f"Error retrieving documentation for {resource_type_name}: {str(e)}"
+            return {
+                "error": f"Error retrieving documentation for {resource_type_name}: {str(e)}",
+                "resource_type": resource_type_name
+            }
     
     @mcp.tool("azapi_terraform_documentation_retriever") 
     async def retrieve_azapi_docs(resource_type_name: str) -> str:
@@ -387,7 +420,7 @@ def create_server(config: Config) -> FastMCP:
             }
     
     @mcp.tool("azurerm_datasource_documentation_retriever")
-    async def retrieve_azurerm_datasource_docs(resource_type_name: str) -> str:
+    async def retrieve_azurerm_datasource_docs(resource_type_name: str) -> Dict[str, Any]:
         """
         Retrieve documentation for a specific AzureRM data source type in Terraform.
         
@@ -399,7 +432,7 @@ def create_server(config: Config) -> FastMCP:
             resource_type_name: The name of the AzureRM data source type
             
         Returns:
-            The documentation for the specified AzureRM data source type
+            JSON object with the documentation for the specified AzureRM data source type
         """
         # Redirect to the main function for consistency
         return await retrieve_azurerm_docs(resource_type_name, "data-source", "", "")
