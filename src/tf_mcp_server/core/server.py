@@ -8,10 +8,7 @@ from pydantic import Field
 from fastmcp import FastMCP
 
 from .config import Config
-from .models import (
-    TerraformAzureProviderDocsResult,
-    SecurityScanResult
-)
+from .models import SecurityScanResult
 from ..tools.azurerm_docs_provider import get_azurerm_documentation_provider
 from ..tools.azapi_docs_provider import get_azapi_documentation_provider
 from ..tools.terraform_runner import get_terraform_runner
@@ -213,24 +210,7 @@ def create_server(config: Config) -> FastMCP:
             logger.error(f"Error retrieving AzAPI documentation: {e}")
             return f"Error retrieving AzAPI documentation for {resource_type_name}: {str(e)}"
     
-    @mcp.tool("search_azurerm_provider_docs")
-    async def search_azurerm_provider_docs(
-        resource_type: str = Field(..., description="Azure resource type (e.g., 'virtual_machine', 'storage_account')"),
-        search_query: str = Field("", description="Specific search query within the resource documentation"),
-        doc_type: str = Field("resource", description="Type of documentation: 'resource' for resources or 'data-source' for data sources")
-    ) -> TerraformAzureProviderDocsResult:
-        """
-        Search and retrieve comprehensive Azure provider documentation for Terraform resources and data sources.
-        
-        Args:
-            resource_type: The Azure resource type to search for
-            search_query: Optional specific query to search within the documentation
-            doc_type: Type of documentation to retrieve ('resource' or 'data-source')
-            
-        Returns:
-            Comprehensive documentation result including arguments, attributes, and examples
-        """
-        return await azurerm_doc_provider.search_azurerm_provider_docs(resource_type, search_query, doc_type)
+
     
     # ==========================================
     # TERRAFORM COMMAND TOOLS
@@ -420,23 +400,7 @@ def create_server(config: Config) -> FastMCP:
                 "recommendations": []
             }
     
-    @mcp.tool("azurerm_datasource_documentation_retriever")
-    async def retrieve_azurerm_datasource_docs(resource_type_name: str) -> Dict[str, Any]:
-        """
-        Retrieve documentation for a specific AzureRM data source type in Terraform.
-        
-        NOTE: This function is deprecated. Use 'azurerm_terraform_documentation_retriever' 
-        with doc_type='data-source' instead for more features including specific 
-        argument/attribute lookup.
-        
-        Args:
-            resource_type_name: The name of the AzureRM data source type
-            
-        Returns:
-            JSON object with the documentation for the specified AzureRM data source type
-        """
-        # Redirect to the main function for consistency
-        return await retrieve_azurerm_docs(resource_type_name, "data-source", "", "")
+
     
     return mcp
 

@@ -375,8 +375,6 @@ The server currently provides these MCP tools:
 **Documentation Tools:**
 - `azurerm_terraform_documentation_retriever` - Get AzureRM resource/data source docs
 - `azapi_terraform_documentation_retriever` - Get AzAPI resource schemas
-- `search_azurerm_provider_docs` - Search Azure provider documentation
-- `azurerm_datasource_documentation_retriever` - (Deprecated) Use main retriever instead
 
 **Terraform Command Tools:**
 - `run_terraform_command` - Execute any Terraform command (init, plan, apply, destroy, validate, fmt)

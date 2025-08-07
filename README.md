@@ -135,7 +135,6 @@ The server provides the following MCP tools:
 #### Documentation Tools
 - **`azurerm_terraform_documentation_retriever`**: Retrieve specific AzureRM resource or data source documentation with optional argument/attribute lookup
 - **`azapi_terraform_documentation_retriever`**: Retrieve AzAPI resource schemas and documentation
-- **`search_azurerm_provider_docs`**: Search Azure provider documentation for both resources and data sources with optional filtering
 
 #### Terraform Command Tools
 - **`run_terraform_command`**: Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
@@ -202,15 +201,6 @@ The server provides the following MCP tools:
     "argument_name": "account_tier"
   }
 }
-
-# Search provider documentation
-{
-  "tool": "search_azurerm_provider_docs",
-  "arguments": {
-    "resource_type": "storage_account",
-    "search_query": "encryption"
-  }
-}
 ```
 
 #### Get Data Source Documentation
@@ -220,15 +210,6 @@ The server provides the following MCP tools:
   "tool": "azurerm_terraform_documentation_retriever",
   "arguments": {
     "resource_type_name": "virtual_machine",
-    "doc_type": "data-source"
-  }
-}
-
-# Or search data source documentation
-{
-  "tool": "search_azurerm_provider_docs",
-  "arguments": {
-    "resource_type": "virtual_machine",
     "doc_type": "data-source"
   }
 }
