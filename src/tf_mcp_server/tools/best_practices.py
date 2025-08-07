@@ -258,6 +258,11 @@ class AzureBestPracticesProvider:
     def _format_best_practices(self, resource_type: str, practices: Dict[str, List[str]]) -> str:
         """Format best practices into a readable string."""
         formatted = f"# Azure Best Practices for {resource_type}\n\n"
+
+        # use 4.x for azurerm provider and use 2.x for azapi provider
+        formatted += "## Provider Version\n\n"
+        formatted += "Use `azurerm` provider version `~> 4.x` for Azure resources.\n\n"
+        formatted += "Use `azapi` provider version `~> 2.x` for advanced Azure resources.\n\n"
         
         for category, items in practices.items():
             formatted += f"## {category.title()}\n\n"
