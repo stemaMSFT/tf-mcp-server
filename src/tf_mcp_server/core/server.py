@@ -14,6 +14,7 @@ from ..tools.azapi_docs_provider import get_azapi_documentation_provider
 from ..tools.terraform_runner import get_terraform_runner
 from ..tools.security_rules import get_azure_security_validator
 from ..tools.best_practices import get_best_practices_provider
+from ..tools.tflint_runner import get_tflint_runner
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def create_server(config: Config) -> FastMCP:
     terraform_runner = get_terraform_runner()
     security_validator = get_azure_security_validator()
     best_practices = get_best_practices_provider()
+    tflint_runner = get_tflint_runner()
     
     # ==========================================
     # DOCUMENTATION TOOLS
@@ -271,7 +273,7 @@ def create_server(config: Config) -> FastMCP:
         
         try:
             # Use the existing execute_terraform_command method
-            result = await terraform_runner.execute_terraform_command(command, hcl_content, vars_content, **kwargs)
+            result = await terraform_runner.execute_terraform_command(command, hcl_content, vars_content or "", **kwargs)
             
             # Ensure result is a dictionary
             if isinstance(result, str):
@@ -320,7 +322,9 @@ def create_server(config: Config) -> FastMCP:
         Returns:
             Security scan results with findings and recommendations
         """
-        return security_validator.validate_security(hcl_content)
+        result_dict = security_validator.validate_security(hcl_content)
+        # Convert dictionary to SecurityScanResult model
+        return SecurityScanResult(**result_dict)
     
     # ==========================================
     # BEST PRACTICES TOOLS
@@ -400,6 +404,92 @@ def create_server(config: Config) -> FastMCP:
                 "recommendations": []
             }
     
+    # ==========================================
+    # TFLINT TOOLS
+    # ==========================================
+    
+    @mcp.tool("run_tflint_analysis")
+    async def run_tflint_analysis(
+        hcl_content: str,
+        output_format: str = Field("json", description="Output format: json, default, checkstyle, junit, compact, sarif"),
+        enable_azure_plugin: bool = Field(True, description="Enable Azure ruleset plugin"),
+        enable_rules: str = Field("", description="Comma-separated list of rules to enable"),
+        disable_rules: str = Field("", description="Comma-separated list of rules to disable"),
+        var_file_content: str = Field("", description="Optional Terraform variables content"),
+        initialize_plugins: bool = Field(True, description="Whether to initialize plugins")
+    ) -> Dict[str, Any]:
+        """
+        Run TFLint static analysis on Terraform configuration.
+        
+        Args:
+            hcl_content: Terraform HCL content to analyze
+            output_format: Output format (json, default, checkstyle, junit, compact, sarif)
+            enable_azure_plugin: Whether to enable the Azure ruleset plugin
+            enable_rules: Comma-separated list of specific rules to enable
+            disable_rules: Comma-separated list of specific rules to disable
+            var_file_content: Optional Terraform variables content
+            initialize_plugins: Whether to run tflint --init to install plugins
+            
+        Returns:
+            TFLint analysis results with issues, summary, and recommendations
+        """
+        try:
+            # Parse rule lists
+            enable_rules_list = [rule.strip() for rule in enable_rules.split(',') if rule.strip()] if enable_rules else None
+            disable_rules_list = [rule.strip() for rule in disable_rules.split(',') if rule.strip()] if disable_rules else None
+            
+            # Run TFLint analysis
+            result = await tflint_runner.lint_terraform_configuration(
+                hcl_content=hcl_content,
+                output_format=output_format,
+                enable_azure_plugin=enable_azure_plugin,
+                enable_rules=enable_rules_list,
+                disable_rules=disable_rules_list,
+                var_file_content=var_file_content if var_file_content else None,
+                initialize_plugins=initialize_plugins
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running TFLint analysis: {e}")
+            return {
+                'success': False,
+                'error': f'TFLint analysis failed: {str(e)}',
+                'issues': [],
+                'summary': {
+                    'total_issues': 0,
+                    'errors': 0,
+                    'warnings': 0,
+                    'notices': 0
+                }
+            }
+    
+    @mcp.tool("check_tflint_installation")
+    async def check_tflint_installation() -> Dict[str, Any]:
+        """
+        Check if TFLint is installed and get version information.
+        
+        Returns:
+            Installation status, version information, and installation help if needed
+        """
+        try:
+            return await tflint_runner.check_tflint_installation()
+        except Exception as e:
+            logger.error(f"Error checking TFLint installation: {e}")
+            return {
+                'installed': False,
+                'error': f'Failed to check TFLint installation: {str(e)}',
+                'installation_help': {
+                    'description': 'TFLint installation check failed',
+                    'install_methods': {
+                        'homebrew_macos': 'brew install tflint',
+                        'chocolatey_windows': 'choco install tflint',
+                        'bash_linux': 'curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash',
+                        'direct_download': 'Download from https://github.com/terraform-linters/tflint/releases'
+                    }
+                }
+            }
 
     
     return mcp
