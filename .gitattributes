@@ -1,0 +1,31 @@
+# Ensure all text files use LF line endings
+* text=auto eol=lf
+
+# Specific file types
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.tf text eol=lf
+*.rego text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Binary files should not be converted
+*.exe binary
+*.dll binary
+*.so binary
+*.pyc binary
+*.pyo binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.jpg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.pdf binary
