@@ -10,14 +10,14 @@ import sys
 # Add src to path for testing
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from core.config import Config
+from tf_mcp_server.core.config import Config, ServerConfig, AzureConfig, TerraformConfig
 
 
 @pytest.fixture
 def test_config():
     """Create a test configuration."""
     return Config(
-        server=Config.ServerConfig(
+        server=ServerConfig(
             host="localhost",
             port=6802,  # Different port for testing
             debug=True

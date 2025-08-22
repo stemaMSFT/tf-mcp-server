@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server for Azure Terraform operations, providing 
 
 This MCP server provides support for Azure Terraform development, including:
 - Azure provider documentation retrieval (AzureRM and AzAPI)
-- HCL code validation
+- HCL code validation and static analysis with TFLint
 - Security scanning and compliance checking
 - Best practices guidance
 - Resource analysis and recommendations
@@ -28,6 +28,7 @@ This MCP server provides support for Azure Terraform development, including:
 - **Unified Terraform Commands**: Single tool to execute all Terraform commands (init, plan, apply, destroy, validate, fmt)
 - **HCL Validation**: Syntax validation and error reporting for Terraform code
 - **HCL Formatting**: Automatic code formatting for Terraform configurations
+- **TFLint Integration**: Static analysis with TFLint including Azure ruleset support
 - **Resource Analysis**: Analyze Azure resources in Terraform configurations
 
 ### 🚀 Integration
@@ -39,6 +40,26 @@ This MCP server provides support for Azure Terraform development, including:
 ### Prerequisites
 - Python 3.11 or higher
 - [UV](https://docs.astral.sh/uv/) (recommended) or pip
+- [TFLint](https://github.com/terraform-linters/tflint) (optional, for static analysis features)
+
+### Optional Tool Installation
+
+#### TFLint (Recommended for Static Analysis)
+TFLint provides advanced static analysis for Terraform configurations. Install it for best experience:
+
+```bash
+# Windows (Chocolatey)
+choco install tflint
+
+# macOS (Homebrew)
+brew install tflint
+
+# Linux (Script)
+curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# Manual download
+# Download from: https://github.com/terraform-linters/tflint/releases
+```
 
 ### Quick Start with UV (Recommended)
 
@@ -141,6 +162,10 @@ The server provides the following MCP tools:
 
 #### Security Tools
 - **`run_azure_security_scan`**: Run security scans on Terraform configurations
+
+#### Static Analysis Tools
+- **`run_tflint_analysis`**: Run TFLint static analysis on Terraform configurations with Azure plugin support
+- **`check_tflint_installation`**: Check TFLint installation status and get version information
 
 #### Best Practices Tools
 - **`get_azure_best_practices`**: Get Azure-specific best practices by resource type and category
@@ -286,6 +311,37 @@ The server provides the following MCP tools:
   "arguments": {
     "resource_type": "storage_account",
     "category": "security"
+  }
+}
+```
+
+#### TFLint Static Analysis
+```python
+# Run TFLint analysis with Azure plugin
+{
+  "tool": "run_tflint_analysis",
+  "arguments": {
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "output_format": "json",
+    "enable_azure_plugin": true
+  }
+}
+
+# Check TFLint installation
+{
+  "tool": "check_tflint_installation",
+  "arguments": {}
+}
+
+# Run with specific rules configuration
+{
+  "tool": "run_tflint_analysis",
+  "arguments": {
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n}",
+    "output_format": "compact",
+    "enable_azure_plugin": true,
+    "disable_rules": "terraform_unused_declarations",
+    "enable_rules": "azurerm_storage_account_min_tls_version"
   }
 }
 ```
