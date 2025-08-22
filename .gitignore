@@ -21,3 +21,5 @@ tfsample/
 data/
 
 tf-mcp-server.log
+
+policy/

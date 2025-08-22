@@ -22,6 +22,7 @@ This MCP server provides support for Azure Terraform development, including:
 
 ### 🛡️ Security & Compliance
 - **Security Scanning**: Built-in security rule validation for Azure resources
+- **Azure Verified Modules (AVM) Policies**: Integration with Conftest and Azure Policy Library AVM for comprehensive policy validation
 - **Best Practices**: Azure-specific best practices and recommendations
 
 ### 🔧 Development Tools
@@ -41,6 +42,7 @@ This MCP server provides support for Azure Terraform development, including:
 - Python 3.11 or higher
 - [UV](https://docs.astral.sh/uv/) (recommended) or pip
 - [TFLint](https://github.com/terraform-linters/tflint) (optional, for static analysis features)
+- [Conftest](https://www.conftest.dev/) (optional, for Azure AVM policy validation)
 
 ### Optional Tool Installation
 
@@ -59,6 +61,23 @@ curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/instal
 
 # Manual download
 # Download from: https://github.com/terraform-linters/tflint/releases
+```
+
+#### Conftest (Recommended for Azure AVM Policy Validation)
+Conftest enables policy validation using the Azure Policy Library AVM:
+
+```bash
+# Windows (Scoop)
+scoop install conftest
+
+# macOS (Homebrew)
+brew install conftest
+
+# Linux (Download binary)
+# Download from: https://github.com/open-policy-agent/conftest/releases
+
+# Go install
+go install github.com/open-policy-agent/conftest@latest
 ```
 
 ### Quick Start with UV (Recommended)
@@ -162,6 +181,8 @@ The server provides the following MCP tools:
 
 #### Security Tools
 - **`run_azure_security_scan`**: Run security scans on Terraform configurations
+- **`run_conftest_avm_validation`**: Validate Terraform HCL against Azure Verified Modules policies using Conftest
+- **`run_conftest_avm_plan_validation`**: Validate Terraform plan JSON against Azure Verified Modules policies using Conftest
 
 #### Static Analysis Tools
 - **`run_tflint_analysis`**: Run TFLint static analysis on Terraform configurations with Azure plugin support
@@ -247,6 +268,37 @@ The server provides the following MCP tools:
   "tool": "run_azure_security_scan",
   "arguments": {
     "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  enable_https_traffic_only = false\n}"
+  }
+}
+```
+
+#### Azure Verified Modules Policy Validation
+```python
+# Validate with all AVM policies
+{
+  "tool": "run_conftest_avm_validation",
+  "arguments": {
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "policy_set": "all"
+  }
+}
+
+# Validate with high severity avmsec policies only
+{
+  "tool": "run_conftest_avm_validation",
+  "arguments": {
+    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "policy_set": "avmsec",
+    "severity_filter": "high"
+  }
+}
+
+# Validate plan JSON directly
+{
+  "tool": "run_conftest_avm_plan_validation", 
+  "arguments": {
+    "terraform_plan_json": "{\"planned_values\": {\"root_module\": {\"resources\": [...]}}}",
+    "policy_set": "Azure-Proactive-Resiliency-Library-v2"
   }
 }
 ```

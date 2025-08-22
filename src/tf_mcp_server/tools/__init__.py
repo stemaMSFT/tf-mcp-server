@@ -6,6 +6,7 @@ from .azurerm_docs_provider import AzureRMDocumentationProvider, get_azurerm_doc
 from .azapi_docs_provider import AzAPIDocumentationProvider, get_azapi_documentation_provider
 from .best_practices import get_best_practices_provider
 from .tflint_runner import TFLintRunner, get_tflint_runner
+from .conftest_avm_runner import ConftestAVMRunner, get_conftest_avm_runner
 
 __all__ = [
     'TerraformRunner',
@@ -18,5 +19,7 @@ __all__ = [
     'get_azapi_documentation_provider',
     'get_best_practices_provider',
     'TFLintRunner',
-    'get_tflint_runner'
+    'get_tflint_runner',
+    'ConftestAVMRunner',
+    'get_conftest_avm_runner'
 ]
