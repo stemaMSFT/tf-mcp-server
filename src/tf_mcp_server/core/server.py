@@ -15,6 +15,7 @@ from ..tools.terraform_runner import get_terraform_runner
 from ..tools.security_rules import get_azure_security_validator
 from ..tools.best_practices import get_best_practices_provider
 from ..tools.tflint_runner import get_tflint_runner
+from ..tools.conftest_avm_runner import get_conftest_avm_runner
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ def create_server(config: Config) -> FastMCP:
     security_validator = get_azure_security_validator()
     best_practices = get_best_practices_provider()
     tflint_runner = get_tflint_runner()
+    conftest_avm_runner = get_conftest_avm_runner()
     
     # ==========================================
     # DOCUMENTATION TOOLS
@@ -491,6 +493,103 @@ def create_server(config: Config) -> FastMCP:
                 }
             }
 
+    # ==========================================
+    # CONFTEST AVM POLICY TOOLS
+    # ==========================================
+    
+    @mcp.tool("run_conftest_avm_validation")
+    async def run_conftest_avm_validation(
+        hcl_content: str,
+        policy_set: str = Field("all", description="Policy set: 'all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec'"),
+        severity_filter: str = Field("", description="Severity filter for avmsec policies: 'high', 'medium', 'low', 'info'"),
+        custom_policies: str = Field("", description="Comma-separated list of custom policy paths")
+    ) -> Dict[str, Any]:
+        """
+        Validate Terraform HCL content against Azure Verified Modules (AVM) policies using Conftest.
+        
+        Args:
+            hcl_content: Terraform HCL content to validate
+            policy_set: Policy set to use ('all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec')
+            severity_filter: Filter by severity for avmsec policies ('high', 'medium', 'low', 'info')
+            custom_policies: Comma-separated list of custom policy paths
+            
+        Returns:
+            Policy validation results with violations and recommendations
+        """
+        try:
+            # Parse custom policies if provided
+            custom_policies_list = [p.strip() for p in custom_policies.split(',') if p.strip()] if custom_policies else None
+            severity = severity_filter if severity_filter else None
+            
+            # Run validation
+            result = await conftest_avm_runner.validate_terraform_hcl_with_avm_policies(
+                hcl_content=hcl_content,
+                policy_set=policy_set,
+                severity_filter=severity,
+                custom_policies=custom_policies_list
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running Conftest AVM validation: {e}")
+            return {
+                'success': False,
+                'error': f'Conftest AVM validation failed: {str(e)}',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+    
+    @mcp.tool("run_conftest_avm_plan_validation")
+    async def run_conftest_avm_plan_validation(
+        terraform_plan_json: str,
+        policy_set: str = Field("all", description="Policy set: 'all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec'"),
+        severity_filter: str = Field("", description="Severity filter for avmsec policies: 'high', 'medium', 'low', 'info'"),
+        custom_policies: str = Field("", description="Comma-separated list of custom policy paths")
+    ) -> Dict[str, Any]:
+        """
+        Validate Terraform plan JSON against Azure Verified Modules (AVM) policies using Conftest.
+        
+        Args:
+            terraform_plan_json: Terraform plan in JSON format
+            policy_set: Policy set to use ('all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec')
+            severity_filter: Filter by severity for avmsec policies ('high', 'medium', 'low', 'info')
+            custom_policies: Comma-separated list of custom policy paths
+            
+        Returns:
+            Policy validation results with violations and recommendations
+        """
+        try:
+            # Parse custom policies if provided
+            custom_policies_list = [p.strip() for p in custom_policies.split(',') if p.strip()] if custom_policies else None
+            severity = severity_filter if severity_filter else None
+            
+            # Run validation
+            result = await conftest_avm_runner.validate_with_avm_policies(
+                terraform_plan_json=terraform_plan_json,
+                policy_set=policy_set,
+                severity_filter=severity,
+                custom_policies=custom_policies_list
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running Conftest AVM plan validation: {e}")
+            return {
+                'success': False,
+                'error': f'Conftest AVM plan validation failed: {str(e)}',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
     
     return mcp
 
