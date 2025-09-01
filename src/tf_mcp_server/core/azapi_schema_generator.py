@@ -28,8 +28,11 @@ class GitHubLoader:
         self.repo = repo
         self.tag = tag
         self.download_dir = Path(tempfile.gettempdir()) / "azapi_downloads"
-        self.download_dir.mkdir(exist_ok=True)
-        
+        try:
+            self.download_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Failed to create download directory {self.download_dir}: {e}")
+            raise
     async def download_latest_release(self) -> Path:
         """Download and extract the latest release."""
         import tarfile
