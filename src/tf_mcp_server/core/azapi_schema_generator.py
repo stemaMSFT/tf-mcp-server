@@ -282,7 +282,7 @@ class BicepTypesParser:
             
     def _parse_object_properties(self, index: int) -> Dict[str, Any]:
         """Parse object properties."""
-        if index >= len(self.types) or index in self.parsing_stack:
+        if index < 0 or index >= len(self.types) or index in self.parsing_stack:
             return {}
             
         self.parsing_stack.append(index)
