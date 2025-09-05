@@ -180,8 +180,8 @@ The server provides the following MCP tools:
 - **`run_terraform_command`**: Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
 
 #### Security Tools
-- **`run_conftest_avm_validation`**: Validate Terraform HCL against Azure Verified Modules policies using Conftest
-- **`run_conftest_avm_plan_validation`**: Validate Terraform plan JSON against Azure Verified Modules policies using Conftest
+- **`run_conftest_validation`**: Validate Terraform HCL against Azure security policies and best practices using Conftest (supports azurerm, azapi, and AVM providers)
+- **`run_conftest_plan_validation`**: Validate Terraform plan JSON against Azure security policies and best practices using Conftest
 
 #### Static Analysis Tools
 - **`run_tflint_analysis`**: Run TFLint static analysis on Terraform configurations with Azure plugin support
@@ -257,20 +257,20 @@ The server provides the following MCP tools:
 }
 ```
 
-#### Azure Verified Modules Policy Validation
+#### Azure Policy Validation
 ```python
-# Validate with all AVM policies
+# Validate with all Azure policies
 {
-  "tool": "run_conftest_avm_validation",
+  "tool": "run_conftest_validation",
   "arguments": {
     "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
     "policy_set": "all"
   }
 }
 
-# Validate with high severity avmsec policies only
+# Validate with high severity security policies only
 {
-  "tool": "run_conftest_avm_validation",
+  "tool": "run_conftest_validation",
   "arguments": {
     "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
     "policy_set": "avmsec",
@@ -280,7 +280,7 @@ The server provides the following MCP tools:
 
 # Validate plan JSON directly
 {
-  "tool": "run_conftest_avm_plan_validation", 
+  "tool": "run_conftest_plan_validation", 
   "arguments": {
     "terraform_plan_json": "{\"planned_values\": {\"root_module\": {\"resources\": [...]}}}",
     "policy_set": "Azure-Proactive-Resiliency-Library-v2"
