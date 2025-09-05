@@ -8,12 +8,9 @@ from pydantic import Field
 from fastmcp import FastMCP
 
 from .config import Config
-from .models import SecurityScanResult
 from ..tools.azurerm_docs_provider import get_azurerm_documentation_provider
 from ..tools.azapi_docs_provider import get_azapi_documentation_provider
 from ..tools.terraform_runner import get_terraform_runner
-from ..tools.security_rules import get_azure_security_validator
-from ..tools.best_practices import get_best_practices_provider
 from ..tools.tflint_runner import get_tflint_runner
 from ..tools.conftest_avm_runner import get_conftest_avm_runner
 
@@ -36,8 +33,6 @@ def create_server(config: Config) -> FastMCP:
     azurerm_doc_provider = get_azurerm_documentation_provider()
     azapi_doc_provider = get_azapi_documentation_provider()
     terraform_runner = get_terraform_runner()
-    security_validator = get_azure_security_validator()
-    best_practices = get_best_practices_provider()
     tflint_runner = get_tflint_runner()
     conftest_avm_runner = get_conftest_avm_runner()
     
@@ -312,42 +307,6 @@ def create_server(config: Config) -> FastMCP:
                 "stdout": "",
                 "stderr": str(e)
             }
-    
-    @mcp.tool("run_azure_security_scan")
-    async def run_security_scan(hcl_content: str) -> SecurityScanResult:
-        """
-        Run security scanning on Azure Terraform configurations.
-        
-        Args:
-            hcl_content: Terraform HCL content to scan for security issues
-            
-        Returns:
-            Security scan results with findings and recommendations
-        """
-        result_dict = security_validator.validate_security(hcl_content)
-        # Convert dictionary to SecurityScanResult model
-        return SecurityScanResult(**result_dict)
-    
-    # ==========================================
-    # BEST PRACTICES TOOLS
-    # ==========================================
-    
-    @mcp.tool("get_azure_best_practices")
-    async def get_azure_best_practices(
-        resource_type: str = Field(..., description="Azure resource type to get best practices for"),
-        category: str = Field("all", description="Category: 'security', 'performance', 'cost', 'reliability', 'all'")
-    ) -> str:
-        """
-        Get Azure best practices for specific resource types and categories.
-        
-        Args:
-            resource_type: Azure resource type to get best practices for
-            category: Category of best practices to retrieve
-            
-        Returns:
-            Formatted best practices guidance
-        """
-        return best_practices.get_best_practices(resource_type, category)
     
     # ==========================================
     # UTILITY TOOLS

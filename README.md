@@ -180,16 +180,12 @@ The server provides the following MCP tools:
 - **`run_terraform_command`**: Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
 
 #### Security Tools
-- **`run_azure_security_scan`**: Run security scans on Terraform configurations
 - **`run_conftest_avm_validation`**: Validate Terraform HCL against Azure Verified Modules policies using Conftest
 - **`run_conftest_avm_plan_validation`**: Validate Terraform plan JSON against Azure Verified Modules policies using Conftest
 
 #### Static Analysis Tools
 - **`run_tflint_analysis`**: Run TFLint static analysis on Terraform configurations with Azure plugin support
 - **`check_tflint_installation`**: Check TFLint installation status and get version information
-
-#### Best Practices Tools
-- **`get_azure_best_practices`**: Get Azure-specific best practices by resource type and category
 
 #### Analysis Tools
 - **`analyze_azure_resources`**: Analyze Azure resources in Terraform configurations
@@ -261,17 +257,6 @@ The server provides the following MCP tools:
 }
 ```
 
-#### Security Scanning
-```python
-# Run security scan on Terraform configuration
-{
-  "tool": "run_azure_security_scan",
-  "arguments": {
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  enable_https_traffic_only = false\n}"
-  }
-}
-```
-
 #### Azure Verified Modules Policy Validation
 ```python
 # Validate with all AVM policies
@@ -303,36 +288,6 @@ The server provides the following MCP tools:
 }
 ```
 
-#### Get Best Practices
-```python
-# Get all best practices for storage accounts
-{
-  "tool": "get_azure_best_practices",
-  "arguments": {
-    "resource_type": "storage_account",
-    "category": "all"
-  }
-}
-
-# Get security-specific best practices
-{
-  "tool": "get_azure_best_practices",
-  "arguments": {
-    "resource_type": "storage_account",
-    "category": "security"
-  }
-}
-
-# Get performance best practices
-{
-  "tool": "get_azure_best_practices",
-  "arguments": {
-    "resource_type": "virtual_machine",
-    "category": "performance"
-  }
-}
-```
-
 #### AzAPI Documentation
 ```python
 # Get AzAPI resource schema
@@ -351,18 +306,6 @@ The server provides the following MCP tools:
   "tool": "analyze_azure_resources",
   "arguments": {
     "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n}\n\nresource \"azurerm_virtual_machine\" \"example\" {\n  name = \"myvm\"\n  resource_group_name = \"myresourcegroup\"\n}"
-  }
-}
-```
-
-#### Get Best Practices
-```python
-# Using the MCP tool
-{
-  "tool": "get_azure_best_practices",
-  "arguments": {
-    "resource_type": "storage_account",
-    "category": "security"
   }
 }
 ```
@@ -418,8 +361,6 @@ tf-mcp-server/
 │       │   ├── __init__.py
 │       │   ├── azapi_docs_provider.py    # AzAPI documentation provider
 │       │   ├── azurerm_docs_provider.py # AzureRM documentation provider
-│       │   ├── best_practices.py   # Best practices provider
-│       │   ├── security_rules.py   # Security validation rules
 │       │   └── terraform_runner.py # Terraform command runner
 │       └── data/                   # Data files
 │           └── azapi_schemas.json  # AzAPI schemas
