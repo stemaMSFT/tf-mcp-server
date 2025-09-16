@@ -37,15 +37,34 @@ This MCP server provides support for Azure Terraform development, including:
 
 ## Quick Start
 
+### 🚀 One-Click Install for VS Code
+
+Get started instantly with our one-click install button for VS Code:
+
+[![Install on VS Code](https://img.shields.io/badge/Install-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=Azure%20Terraform%20MCP%20Server&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-d%22%2C%22--name%22%2C%22tf-mcp-server%22%2C%22-p%22%2C%228000%3A8000%22%2C%22-v%22%2C%22%24%7BHOME%7D%2F.azure%3A%2Fhome%2Fmcpuser%2F.azure%3Aro%22%2C%22ghcr.io%2Fliuwuliuyun%2Ftf-mcp-server%3Alatest%22%5D%2C%22env%22%3A%7B%22MCP_SERVER_HOST%22%3A%220.0.0.0%22%2C%22MCP_SERVER_PORT%22%3A%228000%22%2C%22FASTMCP_LOG_LEVEL%22%3A%22ERROR%22%7D%2C%22transport%22%3A%22http%22%2C%22host%22%3A%22localhost%22%2C%22port%22%3A8000%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D)
+
+This button will automatically:
+- Pull and run the Docker container
+- Configure HTTP transport for optimal performance
+- Mount your Azure credentials for authentication
+- Set up the MCP server in VS Code
+
+**Requirements:** Docker installed on your system
+
+### 📋 Alternative Installation Methods
+
 Choose your preferred installation method:
 
 | Method | Best For | Setup Time | Requirements |
 |--------|----------|------------|--------------|
+| **🚀 One-Click** | Instant setup | 30 seconds | Docker + VS Code |
 | **🐳 Docker** | Production, quick testing | 2 minutes | Docker only |
 | **⚡ UV** | Development, customization | 5 minutes | Python 3.11+ |
 | **🐍 Pip** | Traditional Python workflow | 5 minutes | Python 3.11+ |
 
-**Fastest start:** Use Docker → [Jump to Docker installation](#option-1-docker-container-recommended-for-production)
+**Fastest start:** Use the one-click install button above ↑
+
+**For manual setup:** Use Docker → [Jump to Docker installation](#option-1-docker-container-recommended-for-production)
 
 **For development:** Use UV → [Jump to UV installation](#option-2-uv-installation-recommended-for-development)
 
