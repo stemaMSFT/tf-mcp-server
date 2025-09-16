@@ -35,6 +35,20 @@ This MCP server provides support for Azure Terraform development, including:
 - **MCP Protocol**: Full Model Context Protocol compliance for AI assistant integration
 - **FastMCP Framework**: Built on FastMCP for high-performance async operations
 
+## Quick Start
+
+Choose your preferred installation method:
+
+| Method | Best For | Setup Time | Requirements |
+|--------|----------|------------|--------------|
+| **🐳 Docker** | Production, quick testing | 2 minutes | Docker only |
+| **⚡ UV** | Development, customization | 5 minutes | Python 3.11+ |
+| **🐍 Pip** | Traditional Python workflow | 5 minutes | Python 3.11+ |
+
+**Fastest start:** Use Docker → [Jump to Docker installation](#option-1-docker-container-recommended-for-production)
+
+**For development:** Use UV → [Jump to UV installation](#option-2-uv-installation-recommended-for-development)
+
 ## Installation
 
 ### Prerequisites
@@ -79,89 +93,119 @@ brew install conftest
 go install github.com/open-policy-agent/conftest@latest
 ```
 
-### Quick Start with UV (Recommended)
+## Installation Options
 
-1. **Install UV** (if not already installed):
-   ```bash
-   # On Windows
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   
-   # On macOS/Linux
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
+### Option 1: Docker Container (Recommended for Production)
 
-2. **Clone and Setup**:
-   ```bash
-   git clone <repository-url>
-   cd tf-mcp-server
-   
-   # Install dependencies and create virtual environment
-   uv sync
-   
-   # Run the server
-   uv run tf-mcp-server
-   ```
+The fastest way to get started is using the pre-built Docker container from GitHub Actions:
 
-3. **Development Setup**:
-   ```bash
-   # Install with development dependencies
-   uv sync --dev
-   
-   # Run tests
-   uv run pytest
-   
-   # Format code
-   uv run black .
-   
-   # Run linting
-   uv run flake8
-   ```
+#### Using Pre-built Docker Image
+```bash
+# Pull and run the latest pre-built image from GitHub Container Registry
+docker run -d \
+  --name tf-mcp-server \
+  -p 6801:6801 \
+  -v ~/.azure:/home/mcpuser/.azure:ro \
+  ghcr.io/liuwuliuyun/tf-mcp-server:latest
+```
 
-### Alternative: Traditional pip Installation
+#### Using Docker Compose (Recommended)
+```bash
+# Download the docker-compose.yml file
+curl -O https://raw.githubusercontent.com/liuwuliuyun/tf-mcp-server/main/docker-compose.yml
 
-1. **Clone and Setup**:
-   ```bash
-   git clone <repository-url>
-   cd tf-mcp-server
-   
-   # Create virtual environment
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   # Install the package
-   pip install -e .
-   ```
+# Start the service
+docker-compose up -d
 
-### Docker Installation (Recommended for Production)
+# View logs
+docker-compose logs -f
+```
 
-The easiest way to run the Azure Terraform MCP Server is using Docker:
+The pre-built Docker image includes:
+- ✅ All required dependencies (Python, TFLint, Conftest)
+- ✅ Optimized Alpine Linux base
+- ✅ Security best practices
+- ✅ **Built automatically via GitHub Actions** from every commit to main branch
+- ✅ Multi-architecture support (amd64, arm64)
+- ✅ Available at `ghcr.io/liuwuliuyun/tf-mcp-server:latest`
 
-1. **Using Docker with pre-built image:**
-   ```bash
-   # Run the server directly
-   docker run -d \
-     --name tf-mcp-server \
-     -p 8000:8000 \
-     -v ~/.azure:/home/mcpuser/.azure:ro \
-     ghcr.io/liuwuliuyun/tf-mcp-server:latest
-   ```
+📖 **For detailed Docker usage, see [DOCKER.md](DOCKER.md)**
 
-2. **Using Docker Compose (Recommended):**
-   ```bash
-   # Download docker-compose.yml
-   curl -O https://raw.githubusercontent.com/liuwuliuyun/tf-mcp-server/main/docker-compose.yml
-   
-   # Start the service
-   docker-compose up -d
-   ```
+### Option 2: UV Installation (Recommended for Development)
 
-3. **Build from source:**
-   ```bash
-   git clone <repository-url>
-   cd tf-mcp-server
-   docker build -t tf-mcp-server .
-   docker run -d --name tf-mcp-server -p 8000:8000 tf-mcp-server
-   ```
+For development work or when you want to modify the code:
+
+#### Install UV (if not already installed)
+```bash
+# On Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# On macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+#### Quick Setup
+```bash
+# Clone the repository
+git clone https://github.com/liuwuliuyun/tf-mcp-server.git
+cd tf-mcp-server
+
+# Install dependencies and create virtual environment
+uv sync
+
+# Run the server
+uv run tf-mcp-server
+```
+
+#### Development Setup
+```bash
+# Install with development dependencies
+uv sync --dev
+
+# Run tests
+uv run pytest
+
+# Format code
+uv run black .
+
+# Run linting
+uv run flake8
+```
+
+### Option 3: Traditional Python Installation
+
+If you prefer traditional Python package management:
+
+```bash
+# Clone the repository
+git clone https://github.com/liuwuliuyun/tf-mcp-server.git
+cd tf-mcp-server
+
+# Create and activate virtual environment
+python -m venv venv
+# On Windows
+venv\Scripts\activate
+# On macOS/Linux
+source venv/bin/activate
+
+# Install the package
+pip install -e .
+
+# Run the server
+python -m tf_mcp_server
+```
+
+### Installation Verification
+
+After installation, verify the server is working:
+
+```bash
+# Check server status (should show "Server started on http://localhost:6801")
+curl http://localhost:6801/health
+
+# Test a simple tool call (if MCP client is available)
+# The server should respond with available tools
+```
 
 📖 **For detailed Docker usage, see [DOCKER.md](DOCKER.md)**
 
