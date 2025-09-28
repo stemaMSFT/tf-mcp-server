@@ -7,7 +7,11 @@ import json
 import subprocess
 import tempfile
 from typing import Dict, Any, Optional, List
-from ..core.utils import extract_hcl_from_markdown, strip_ansi_escape_sequences
+from pathlib import Path
+from ..core.utils import (
+    strip_ansi_escape_sequences,
+    resolve_workspace_path,
+)
 
 
 class ConftestAVMRunner:
@@ -329,16 +333,170 @@ exception contains rules if {
         return violations
 
     async def validate_terraform_hcl_with_avm_policies(self,
-                                                      hcl_content: str,
+                                                      terraform_hcl: str,
                                                       policy_set: str = "all",
                                                       severity_filter: Optional[str] = None,
                                                       custom_policies: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Validate Terraform HCL content against Azure Verified Modules policies.
-        This method will first convert HCL to a plan, then validate it.
+        Validate raw Terraform HCL content against Azure Verified Modules policies.
+
+        This helper writes the HCL to a temporary workspace, runs ``terraform init`` and
+        ``terraform plan``, converts the plan to JSON, and then delegates to
+        :meth:`validate_with_avm_policies` for policy enforcement.
+
+        Args:
+            terraform_hcl: Terraform configuration content in HCL format
+            policy_set: Policy set to use ('all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec')
+            severity_filter: Optional severity filter for avmsec policies
+            custom_policies: Optional list of custom policy paths to include
+
+        Returns:
+            Policy validation results with success status and violation details
+        """
+        if not terraform_hcl or not terraform_hcl.strip():
+            return {
+                'success': False,
+                'error': 'No Terraform HCL content provided',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="conftest-avm-hcl-") as temp_dir:
+                temp_path = Path(temp_dir)
+                main_tf_path = temp_path / "main.tf"
+                main_tf_path.write_text(terraform_hcl, encoding='utf-8')
+
+                init_result = subprocess.run(['terraform', 'init'],
+                                             cwd=str(temp_path),
+                                             capture_output=True,
+                                             text=True,
+                                             timeout=120)
+
+                if init_result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': f'Terraform init failed: {strip_ansi_escape_sequences(init_result.stderr)}',
+                        'violations': [],
+                        'summary': {
+                            'total_violations': 0,
+                            'failures': 0,
+                            'warnings': 0
+                        }
+                    }
+
+                plan_file = temp_path / 'tfplan.binary'
+                plan_result = subprocess.run(['terraform', 'plan', f'-out={plan_file.name}'],
+                                              cwd=str(temp_path),
+                                              capture_output=True,
+                                              text=True,
+                                              timeout=120)
+
+                if plan_result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': f'Terraform plan failed: {strip_ansi_escape_sequences(plan_result.stderr)}',
+                        'violations': [],
+                        'summary': {
+                            'total_violations': 0,
+                            'failures': 0,
+                            'warnings': 0
+                        }
+                    }
+
+                show_result = subprocess.run(['terraform', 'show', '-json', plan_file.name],
+                                              cwd=str(temp_path),
+                                              capture_output=True,
+                                              text=True,
+                                              timeout=60)
+
+                if show_result.returncode != 0 or not show_result.stdout:
+                    return {
+                        'success': False,
+                        'error': f'Terraform show failed: {strip_ansi_escape_sequences(show_result.stderr)}',
+                        'violations': [],
+                        'summary': {
+                            'total_violations': 0,
+                            'failures': 0,
+                            'warnings': 0
+                        }
+                    }
+
+                # Delegate to plan JSON validation
+                try:
+                    result = await self.validate_with_avm_policies(
+                        terraform_plan_json=show_result.stdout,
+                        policy_set=policy_set,
+                        severity_filter=severity_filter,
+                        custom_policies=custom_policies
+                    )
+                except Exception as exc:
+                    return {
+                        'success': False,
+                        'error': f'Error during AVM policy validation: {exc}',
+                        'violations': [],
+                        'summary': {
+                            'total_violations': 0,
+                            'failures': 0,
+                            'warnings': 0
+                        }
+                    }
+
+                # Provide context about the temporary workspace used
+                result.setdefault('workspace_path', str(temp_path))
+                result.setdefault('terraform_files', ['main.tf'])
+                result.setdefault('plan_file', str(plan_file))
+                return result
+
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': 'Terraform operation timed out while processing HCL content',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+        except FileNotFoundError as exc:
+            return {
+                'success': False,
+                'error': f'Terraform executable not found: {exc}',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+        except Exception as exc:
+            return {
+                'success': False,
+                'error': f'Error validating Terraform HCL: {strip_ansi_escape_sequences(str(exc))}',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+
+    async def validate_workspace_folder_with_avm_policies(self,
+                                                         workspace_folder: str,
+                                                         policy_set: str = "all",
+                                                         severity_filter: Optional[str] = None,
+                                                         custom_policies: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Validate Terraform files in a workspace folder against Azure Verified Modules policies.
         
         Args:
-            hcl_content: Terraform HCL content
+            workspace_folder: Path to the workspace folder to validate (relative paths
+                are resolved against the configured workspace root)
             policy_set: Policy set to use ('all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec')
             severity_filter: Filter by severity for avmsec policies ('high', 'medium', 'low', 'info')
             custom_policies: List of custom policy paths to include
@@ -346,38 +504,214 @@ exception contains rules if {
         Returns:
             Policy validation results
         """
-        # Extract HCL if needed
-        extracted_hcl = extract_hcl_from_markdown(hcl_content)
-        if extracted_hcl:
-            hcl_content = extracted_hcl
+        if not workspace_folder or not workspace_folder.strip():
+            return {
+                'success': False,
+                'error': 'No workspace folder provided',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
         
         try:
-            # Create temporary directory for Terraform operations
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Write HCL content to main.tf
-                main_tf_path = os.path.join(temp_dir, 'main.tf')
-                with open(main_tf_path, 'w') as f:
-                    f.write(hcl_content)
-                
-                # Initialize Terraform
-                init_result = subprocess.run(['terraform', 'init'], 
-                                           cwd=temp_dir,
-                                           capture_output=True, 
-                                           text=True, 
-                                           timeout=120)
-                
-                if init_result.returncode != 0:
-                    error_message = strip_ansi_escape_sequences(init_result.stderr)
+            # Build workspace folder path
+            workspace_path = resolve_workspace_path(workspace_folder.strip())
+            
+            # Check if folder exists
+            if not workspace_path.exists():
+                return {
+                    'success': False,
+                    'error': f'Workspace folder "{workspace_folder}" does not exist at {workspace_path}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            if not workspace_path.is_dir():
+                return {
+                    'success': False,
+                    'error': f'"{workspace_folder}" is not a directory',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Check if folder contains Terraform files
+            tf_files = list(workspace_path.glob('*.tf'))
+            if not tf_files:
+                return {
+                    'success': False,
+                    'error': f'No .tf files found in workspace folder "{workspace_folder}"',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Initialize Terraform in the workspace folder
+            init_result = subprocess.run(['terraform', 'init'], 
+                                       cwd=str(workspace_path),
+                                       capture_output=True, 
+                                       text=True, 
+                                       timeout=120)
+            
+            if init_result.returncode != 0:
+                error_message = strip_ansi_escape_sequences(init_result.stderr)
+                return {
+                    'success': False,
+                    'error': f'Terraform init failed in workspace folder: {error_message}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Create Terraform plan
+            plan_result = subprocess.run(['terraform', 'plan', '-out=tfplan.binary'], 
+                                       cwd=str(workspace_path),
+                                       capture_output=True, 
+                                       text=True, 
+                                       timeout=120)
+            
+            if plan_result.returncode != 0:
+                error_message = strip_ansi_escape_sequences(plan_result.stderr)
+                return {
+                    'success': False,
+                    'error': f'Terraform plan failed in workspace folder: {error_message}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Convert plan to JSON
+            show_result = subprocess.run(['terraform', 'show', '-json', 'tfplan.binary'], 
+                                       cwd=str(workspace_path),
+                                       capture_output=True, 
+                                       text=True, 
+                                       timeout=60)
+            
+            if show_result.returncode != 0:
+                error_message = strip_ansi_escape_sequences(show_result.stderr)
+                return {
+                    'success': False,
+                    'error': f'Terraform show failed in workspace folder: {error_message}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Now validate the plan JSON with AVM policies
+            result = await self.validate_with_avm_policies(
+                terraform_plan_json=show_result.stdout,
+                policy_set=policy_set,
+                severity_filter=severity_filter,
+                custom_policies=custom_policies
+            )
+            
+            # Add workspace folder information to the result
+            if 'workspace_folder' not in result:
+                result['workspace_folder'] = workspace_folder
+                result['workspace_path'] = str(workspace_path)
+                result['terraform_files'] = [tf_file.name for tf_file in tf_files]
+            
+            return result
+            
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': 'Terraform operation timed out in workspace folder',
+                'violations': [],
+                'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+            }
+        except Exception as e:
+            error_message = strip_ansi_escape_sequences(str(e))
+            return {
+                'success': False,
+                'error': f'Error validating workspace folder with AVM policies: {error_message}',
+                'violations': [],
+                'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+            }
+
+    async def validate_workspace_folder_plan_with_avm_policies(self,
+                                                              folder_name: str,
+                                                              policy_set: str = "all",
+                                                              severity_filter: Optional[str] = None,
+                                                              custom_policies: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Validate an existing Terraform plan file in a workspace folder against Azure Verified Modules policies.
+        This method looks for existing tfplan.binary or plan files in the workspace folder.
+        
+        Args:
+            folder_name: Name of the folder in the workspace containing the plan file
+                (relative paths are resolved against the configured workspace root)
+            policy_set: Policy set to use ('all', 'Azure-Proactive-Resiliency-Library-v2', 'avmsec')
+            severity_filter: Filter by severity for avmsec policies ('high', 'medium', 'low', 'info')
+            custom_policies: List of custom policy paths to include
+            
+        Returns:
+            Policy validation results
+        """
+        if not folder_name or not folder_name.strip():
+            return {
+                'success': False,
+                'error': 'No folder name provided',
+                'violations': [],
+                'summary': {
+                    'total_violations': 0,
+                    'failures': 0,
+                    'warnings': 0
+                }
+            }
+        
+        try:
+            # Build workspace folder path
+            workspace_path = resolve_workspace_path(folder_name.strip())
+            
+            # Check if folder exists
+            if not workspace_path.exists():
+                return {
+                    'success': False,
+                    'error': f'Workspace folder "{folder_name}" does not exist at {workspace_path}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            if not workspace_path.is_dir():
+                return {
+                    'success': False,
+                    'error': f'"{folder_name}" is not a directory',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Look for existing plan files
+            plan_files = list(workspace_path.glob('tfplan.binary')) + list(workspace_path.glob('*.tfplan'))
+            if not plan_files:
+                # Try to create a plan if .tf files exist
+                tf_files = list(workspace_path.glob('*.tf'))
+                if not tf_files:
                     return {
                         'success': False,
-                        'error': f'Terraform init failed: {error_message}',
+                        'error': f'No .tf files or plan files found in workspace folder "{folder_name}"',
                         'violations': [],
                         'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
                     }
                 
+                # Initialize Terraform if not already initialized
+                if not (workspace_path / '.terraform').exists():
+                    init_result = subprocess.run(['terraform', 'init'], 
+                                               cwd=str(workspace_path),
+                                               capture_output=True, 
+                                               text=True, 
+                                               timeout=120)
+                    
+                    if init_result.returncode != 0:
+                        error_message = strip_ansi_escape_sequences(init_result.stderr)
+                        return {
+                            'success': False,
+                            'error': f'Terraform init failed in workspace folder: {error_message}',
+                            'violations': [],
+                            'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                        }
+                
                 # Create Terraform plan
                 plan_result = subprocess.run(['terraform', 'plan', '-out=tfplan.binary'], 
-                                           cwd=temp_dir,
+                                           cwd=str(workspace_path),
                                            capture_output=True, 
                                            text=True, 
                                            timeout=120)
@@ -386,39 +720,60 @@ exception contains rules if {
                     error_message = strip_ansi_escape_sequences(plan_result.stderr)
                     return {
                         'success': False,
-                        'error': f'Terraform plan failed: {error_message}',
+                        'error': f'Terraform plan failed in workspace folder: {error_message}',
                         'violations': [],
                         'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
                     }
                 
-                # Convert plan to JSON
-                show_result = subprocess.run(['terraform', 'show', '-json', 'tfplan.binary'], 
-                                           cwd=temp_dir,
-                                           capture_output=True, 
-                                           text=True, 
-                                           timeout=60)
-                
-                if show_result.returncode != 0:
-                    error_message = strip_ansi_escape_sequences(show_result.stderr)
-                    return {
-                        'success': False,
-                        'error': f'Terraform show failed: {error_message}',
-                        'violations': [],
-                        'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
-                    }
-                
-                # Now validate the plan JSON with AVM policies
-                return await self.validate_with_avm_policies(
-                    terraform_plan_json=show_result.stdout,
-                    policy_set=policy_set,
-                    severity_filter=severity_filter,
-                    custom_policies=custom_policies
-                )
-                
+                plan_files = list(workspace_path.glob('tfplan.binary'))
+            
+            if not plan_files:
+                return {
+                    'success': False,
+                    'error': f'No plan file found in workspace folder "{folder_name}" after attempting to create one',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Use the first plan file found
+            plan_file = plan_files[0]
+            
+            # Convert plan to JSON
+            show_result = subprocess.run(['terraform', 'show', '-json', str(plan_file)], 
+                                       cwd=str(workspace_path),
+                                       capture_output=True, 
+                                       text=True, 
+                                       timeout=60)
+            
+            if show_result.returncode != 0:
+                error_message = strip_ansi_escape_sequences(show_result.stderr)
+                return {
+                    'success': False,
+                    'error': f'Terraform show failed in workspace folder: {error_message}',
+                    'violations': [],
+                    'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
+                }
+            
+            # Now validate the plan JSON with AVM policies
+            result = await self.validate_with_avm_policies(
+                terraform_plan_json=show_result.stdout,
+                policy_set=policy_set,
+                severity_filter=severity_filter,
+                custom_policies=custom_policies
+            )
+            
+            # Add workspace folder information to the result
+            if 'workspace_folder' not in result:
+                result['workspace_folder'] = folder_name
+                result['workspace_path'] = str(workspace_path)
+                result['plan_file'] = str(plan_file)
+            
+            return result
+            
         except subprocess.TimeoutExpired:
             return {
                 'success': False,
-                'error': 'Terraform operation timed out',
+                'error': 'Terraform operation timed out in workspace folder',
                 'violations': [],
                 'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
             }
@@ -426,7 +781,7 @@ exception contains rules if {
             error_message = strip_ansi_escape_sequences(str(e))
             return {
                 'success': False,
-                'error': f'Error validating HCL with AVM policies: {error_message}',
+                'error': f'Error validating workspace folder plan with AVM policies: {error_message}',
                 'violations': [],
                 'summary': {'total_violations': 0, 'failures': 0, 'warnings': 0}
             }

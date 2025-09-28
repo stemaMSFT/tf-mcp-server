@@ -8,10 +8,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     MCP_SERVER_HOST=0.0.0.0 \
     MCP_SERVER_PORT=8000 \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    MCP_WORKSPACE_ROOT=/workspace
 
 # Install system dependencies
-RUN tdnf update && tdnf install -y \
+RUN tdnf update -y && tdnf install -y \
     curl \
     unzip \
     wget \
@@ -21,7 +22,6 @@ RUN tdnf update && tdnf install -y \
     tar \
     net-tools \
     shadow-utils \
-    azure-cli \
     && tdnf clean all
 
 # Install Terraform (latest version)
@@ -33,6 +33,16 @@ RUN TERRAFORM_VERSION=$(curl -s "https://api.github.com/repos/hashicorp/terrafor
     && mv terraform /usr/local/bin/ \
     && rm terraform.zip \
     && terraform version
+
+# Install Azure Export for Terraform (aztfexport) from GitHub releases (latest version)
+RUN AZTFEXPORT_VERSION=$(curl -s "https://api.github.com/repos/Azure/aztfexport/releases/latest" | jq -r '.tag_name' | cut -c 2-) \
+    && ARCH=$(uname -m) \
+    && if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi \
+    && curl -fsSL "https://github.com/Azure/aztfexport/releases/download/v${AZTFEXPORT_VERSION}/aztfexport_v${AZTFEXPORT_VERSION}_linux_${ARCH}.zip" -o aztfexport.zip \
+    && unzip aztfexport.zip \
+    && mv aztfexport /usr/local/bin/ \
+    && rm aztfexport.zip \
+    && aztfexport --version
 
 # Install TFLint
 RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
@@ -59,15 +69,21 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
+# Create workspace directory
+RUN mkdir -p "$MCP_WORKSPACE_ROOT"
+
+# Mark the workspace as a mount point so users can bind their host directories easily
+VOLUME ["$MCP_WORKSPACE_ROOT"]
+
 # Install UV package manager for faster dependency resolution
 RUN pip install uv
 
 # Create directories for logs and health checks
-RUN mkdir -p /app/logs /app/health /home/mcpuser/.azure
+RUN mkdir -p /app/logs /app/health /home/mcpuser/
 
 # Set proper ownership and permissions for the app directory first
-RUN chown -R mcpuser:mcpuser /app /home/mcpuser \
-    && chmod 755 /app/logs /app/health
+RUN chown -R mcpuser:mcpuser /app /home/mcpuser "$MCP_WORKSPACE_ROOT" \
+    && chmod 755 /app/logs /app/health "$MCP_WORKSPACE_ROOT"
 
 # Switch to non-root user before installing dependencies
 USER mcpuser

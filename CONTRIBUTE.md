@@ -474,7 +474,11 @@ formatted = await runner.execute_terraform_command("fmt", hcl)
 from tf_mcp_server.tools.conftest_avm_runner import ConftestAVMRunner  
 
 runner = ConftestAVMRunner()
-result = await runner.run_conftest_validation(hcl_content, "avmsec", "high")
+result = await runner.validate_workspace_folder_with_avm_policies(
+  workspace_folder="exported-rg-acctest0001",
+  policy_set="avmsec",
+  severity_filter="high"
+)
 ```
 
 ### Current MCP Tools
@@ -491,14 +495,22 @@ The server provides the following MCP tools (as defined in `src/tf_mcp_server/co
 - `get_avm_outputs` - Retrieve output definitions for a specific AVM module version
 
 **Terraform Command Tools:**
-- `run_terraform_command` - Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
+- `run_terraform_command` - Execute any Terraform command (init, plan, apply, destroy, validate, fmt) within existing workspace directories
 
 **Security & Analysis Tools:**
-- `run_conftest_validation` - Validate Terraform HCL against Azure security policies and best practices using Conftest
-- `run_conftest_plan_validation` - Validate Terraform plan JSON against Azure security policies and best practices using Conftest
-- `run_tflint_analysis` - Run TFLint static analysis on Terraform configurations with Azure plugin support
+- `run_conftest_workspace_validation` - Validate Terraform workspaces against Azure security policies and best practices using Conftest
+- `run_conftest_workspace_plan_validation` - Validate Terraform plan files against Azure security policies and best practices using Conftest
+- `run_tflint_workspace_analysis` - Run TFLint static analysis on Terraform workspaces with Azure plugin support
 - `check_tflint_installation` - Check TFLint installation status and get version information
 - `analyze_azure_resources` - Analyze Azure resources in Terraform configurations with recommendations
+
+**Azure Export Tools (aztfexport Integration):**
+- `check_aztfexport_installation` - Check Azure Export for Terraform (aztfexport) installation status and version
+- `aztfexport_resource` - Export a single Azure resource to Terraform configuration using aztfexport
+- `aztfexport_resource_group` - Export an entire Azure resource group and its resources to Terraform configuration
+- `aztfexport_query` - Export Azure resources using Azure Resource Graph queries to Terraform configuration
+- `aztfexport_get_config` - Get aztfexport configuration settings
+- `aztfexport_set_config` - Set aztfexport configuration settings
 
 When adding new tools, follow the established patterns and ensure they integrate well with existing functionality.
 
@@ -544,7 +556,7 @@ The project uses:
 
 Key directories:
 - `src/tf_mcp_server/core/` - Core server functionality and all MCP tool definitions
-  - `server.py` - Main FastMCP server with all 13 MCP tools
+  - `server.py` - Main FastMCP server with all 19 MCP tools
   - `config.py` - Configuration management
   - `models.py` - Data models and types
   - `terraform_executor.py` - Terraform execution utilities
@@ -554,6 +566,7 @@ Key directories:
   - `azurerm_docs_provider.py` - AzureRM documentation provider
   - `azapi_docs_provider.py` - AzAPI documentation provider  
   - `avm_docs_provider.py` - Azure Verified Modules provider
+  - `aztfexport_runner.py` - Azure Export for Terraform (aztfexport) integration
   - `terraform_runner.py` - Terraform command execution
   - `tflint_runner.py` - TFLint static analysis runner
   - `conftest_avm_runner.py` - Conftest policy validation runner

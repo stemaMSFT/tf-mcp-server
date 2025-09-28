@@ -28,8 +28,9 @@ This MCP server provides support for Azure Terraform development, including:
 - **Unified Terraform Commands**: Single tool to execute all Terraform commands (init, plan, apply, destroy, validate, fmt)
 - **HCL Validation**: Syntax validation and error reporting for Terraform code
 - **HCL Formatting**: Automatic code formatting for Terraform configurations
-- **TFLint Integration**: Static analysis with TFLint including Azure ruleset support
+- **TFLint Integration**: Static analysis with TFLint including Azure ruleset support for Terraform workspaces
 - **Resource Analysis**: Analyze Azure resources in Terraform configurations
+- **Azure Export for Terraform (aztfexport)**: Export existing Azure resources to Terraform configuration and state
 
 ### 🚀 Integration
 - **MCP Protocol**: Full Model Context Protocol compliance for AI assistant integration
@@ -37,37 +38,34 @@ This MCP server provides support for Azure Terraform development, including:
 
 ## Quick Start
 
-The fastest way to get started is with Docker (recommended):
-
-```bash
-# Basic setup - perfect for trying out documentation features
-docker run -d --name tf-mcp-server -p 8000:8000 ghcr.io/liuwuliuyun/tf-mcp-server:latest
-
-# Verify it's working
-curl http://localhost:8000/health
-# Should return: {"status": "healthy"}
-```
-
-**For Windows PowerShell users:**
-```powershell
-# Basic setup
-docker run -d --name tf-mcp-server -p 8000:8000 ghcr.io/liuwuliuyun/tf-mcp-server:latest
-
-# Verify it's working
-Invoke-RestMethod -Uri "http://localhost:8000/health"
-```
-
-### VS Code Setup
-
-Once your server is running, create or edit `.vscode/mcp.json` in your workspace:
+Create or edit `.vscode/mcp.json` in your workspace:
 
 ```json
 {
-    "servers": {
-        "Azure Terraform MCP Server": {
-            "url": "http://localhost:8000/mcp/"
-        }
+  "servers": {
+    "tf-mcp-server": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--name", "tf-mcp-server-instance",
+        "-v", "${workspaceFolder}:/workspace",
+        "-e", "ARM_CLIENT_ID=${env:ARM_CLIENT_ID}",
+        "-e", "ARM_CLIENT_SECRET=${env:ARM_CLIENT_SECRET}",
+        "-e", "ARM_SUBSCRIPTION_ID=${env:ARM_SUBSCRIPTION_ID}",
+        "-e", "ARM_TENANT_ID=${env:ARM_TENANT_ID}",
+        "-e", "LOG_LEVEL=INFO",
+        "ghcr.io/liuwuliuyun/tf-mcp-server:latest"
+      ],
+      "env": {
+        "ARM_CLIENT_ID": "${env:ARM_CLIENT_ID}",
+        "ARM_CLIENT_SECRET": "${env:ARM_CLIENT_SECRET}",
+        "ARM_SUBSCRIPTION_ID": "${env:ARM_SUBSCRIPTION_ID}",
+        "ARM_TENANT_ID": "${env:ARM_TENANT_ID}"
+      }
     }
+  }
 }
 ```
 
@@ -100,48 +98,68 @@ The server provides the following MCP tools:
 - **`get_avm_outputs`**: Retrieve the output definitions for a specific AVM module version
 
 #### Terraform Command Tools
-- **`run_terraform_command`**: Execute any Terraform command (init, plan, apply, destroy, validate, fmt) with provided HCL content
+- **`run_terraform_command`**: Execute Terraform CLI commands (init, plan, apply, destroy, validate, fmt) inside a workspace folder that already contains configuration files
 
 #### Security Tools
-- **`run_conftest_validation`**: Validate Terraform HCL against Azure security policies and best practices using Conftest (supports azurerm, azapi, and AVM providers)
-- **`run_conftest_plan_validation`**: Validate Terraform plan JSON against Azure security policies and best practices using Conftest
+- **`run_conftest_workspace_validation`**: Validate Terraform files in a workspace folder against Azure security policies (works with aztfexport folders)
+- **`run_conftest_workspace_plan_validation`**: Validate Terraform plan files in a workspace folder against Azure security policies
 
 #### Static Analysis Tools
-- **`run_tflint_analysis`**: Run TFLint static analysis on Terraform configurations with Azure plugin support
+- **`run_tflint_workspace_analysis`**: Run TFLint static analysis on workspace folders containing Terraform files (supports recursive analysis)
 - **`check_tflint_installation`**: Check TFLint installation status and get version information
 
 #### Analysis Tools
 - **`analyze_azure_resources`**: Analyze Azure resources in Terraform configurations
 
+#### Azure Export Tools (aztfexport Integration)
+- **`check_aztfexport_installation`**: Check Azure Export for Terraform (aztfexport) installation status and version
+- **`aztfexport_resource`**: Export a single Azure resource to Terraform configuration using aztfexport
+- **`aztfexport_resource_group`**: Export an entire Azure resource group and its resources to Terraform configuration
+- **`aztfexport_query`**: Export Azure resources using Azure Resource Graph queries to Terraform configuration
+- **`aztfexport_get_config`**: Get aztfexport configuration settings
+- **`aztfexport_set_config`**: Set aztfexport configuration settings
+
 ### Example Usage
 
 #### Execute Terraform Commands
+Prepare a workspace directory (for example `workspace/demo`) containing your Terraform configuration files before invoking the tool.
+
 ```python
-# Initialize Terraform with HCL content
+# Initialize Terraform in a workspace directory
 {
   "tool": "run_terraform_command",
   "arguments": {
     "command": "init",
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "workspace_folder": "workspace/demo",
     "upgrade": true
   }
 }
 
-# Validate HCL code
+# Generate an execution plan
 {
   "tool": "run_terraform_command",
   "arguments": {
-    "command": "validate",
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}"
+    "command": "plan",
+    "workspace_folder": "workspace/demo"
   }
 }
 
-# Format HCL code
+# Apply changes (auto-approve optional)
+{
+  "tool": "run_terraform_command",
+  "arguments": {
+    "command": "apply",
+    "workspace_folder": "workspace/demo",
+    "auto_approve": true
+  }
+}
+
+# Format Terraform files in the workspace
 {
   "tool": "run_terraform_command",
   "arguments": {
     "command": "fmt",
-    "hcl_content": "resource\"azurerm_storage_account\"\"example\"{\nname=\"mystorageaccount\"\n}"
+    "workspace_folder": "workspace/demo"
   }
 }
 ```
@@ -181,32 +199,25 @@ The server provides the following MCP tools:
 ```
 
 #### Azure Policy Validation
-```python
-# Validate with all Azure policies
-{
-  "tool": "run_conftest_validation",
-  "arguments": {
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
-    "policy_set": "all"
-  }
-}
+Conftest validation operates on Terraform workspaces or plan files. Save your configuration to disk (for example, using aztfexport or manual edits) and point the tools at those files. You can use `run_terraform_command` to run Terraform inside that workspace for init/plan/apply steps:
 
-# Validate with high severity security policies only
+```python
+# Validate Terraform files in a workspace folder (works with aztfexport folders)
 {
-  "tool": "run_conftest_validation",
+  "tool": "run_conftest_workspace_validation",
   "arguments": {
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "workspace_folder": "exported-rg-acctest0001",
     "policy_set": "avmsec",
     "severity_filter": "high"
   }
 }
 
-# Validate plan JSON directly
+# Validate plan files stored in a workspace folder
 {
-  "tool": "run_conftest_plan_validation", 
+  "tool": "run_conftest_workspace_plan_validation",
   "arguments": {
-    "terraform_plan_json": "{\"planned_values\": {\"root_module\": {\"resources\": [...]}}}",
-    "policy_set": "Azure-Proactive-Resiliency-Library-v2"
+    "folder_name": "exported-rg-acctest0001",
+    "policy_set": "all"
   }
 }
 ```
@@ -276,15 +287,62 @@ The server provides the following MCP tools:
 }
 ```
 
-#### TFLint Static Analysis
+## Integrated Workflows
+
+### Export and Validate Azure Resources
+
+The conftest tools are designed to work seamlessly with aztfexport for a complete export-and-validate workflow:
+
 ```python
-# Run TFLint analysis with Azure plugin
+# 1. Export Azure resource to workspace folder
 {
-  "tool": "run_tflint_analysis",
+  "tool": "aztfexport_resource",
   "arguments": {
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n  resource_group_name = \"myresourcegroup\"\n  location = \"East US\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n}",
+    "resource_id": "/subscriptions/12345678-1234-1234-1234-123456789abc/resourceGroups/my-rg/providers/Microsoft.Storage/storageAccounts/mystorageaccount",
+    "output_folder_name": "exported-storage-account",
+    "provider": "azurerm"
+  }
+}
+
+# 2. Validate exported Terraform files
+{
+  "tool": "run_conftest_workspace_validation", 
+  "arguments": {
+    "workspace_folder": "exported-storage-account",
+    "policy_set": "avmsec",
+    "severity_filter": "high"
+  }
+}
+
+# 3. Optionally validate just the plan file
+{
+  "tool": "run_conftest_workspace_plan_validation",
+  "arguments": {
+    "folder_name": "exported-storage-account", 
+    "policy_set": "Azure-Proactive-Resiliency-Library-v2"
+  }
+}
+```
+
+This workflow allows you to:
+1. Export existing Azure infrastructure as Terraform code
+2. Immediately validate it against Azure security policies and best practices
+3. Identify compliance issues before applying changes
+
+#### TFLint Static Analysis
+TFLint now runs against Terraform workspaces. Save your configuration to disk, then invoke the workspace analysis tool:
+
+```python
+# Run TFLint analysis on a workspace folder
+{
+  "tool": "run_tflint_workspace_analysis",
+  "arguments": {
+    "workspace_folder": "/path/to/terraform/project",
     "output_format": "json",
-    "enable_azure_plugin": true
+    "recursive": true,
+    "enable_azure_plugin": true,
+    "enable_rules": ["azurerm_storage_account_min_tls_version"],
+    "disable_rules": ["terraform_unused_declarations"]
   }
 }
 
@@ -293,16 +351,64 @@ The server provides the following MCP tools:
   "tool": "check_tflint_installation",
   "arguments": {}
 }
+```
 
-# Run with specific rules configuration
+#### Azure Export for Terraform (aztfexport)
+```python
+# Check if aztfexport is installed
 {
-  "tool": "run_tflint_analysis",
+  "tool": "check_aztfexport_installation",
+  "arguments": {}
+}
+
+# Export a single Azure resource to Terraform configuration
+{
+  "tool": "aztfexport_resource",
   "arguments": {
-    "hcl_content": "resource \"azurerm_storage_account\" \"example\" {\n  name = \"mystorageaccount\"\n}",
-    "output_format": "compact",
-    "enable_azure_plugin": true,
-    "disable_rules": "terraform_unused_declarations",
-    "enable_rules": "azurerm_storage_account_min_tls_version"
+    "resource_id": "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/my-rg/providers/Microsoft.Storage/storageAccounts/mystorageacct",
+    "provider": "azurerm",
+    "dry_run": false,
+    "resource_name": "primary_storage"
+  }
+}
+
+# Export an entire resource group
+{
+  "tool": "aztfexport_resource_group",
+  "arguments": {
+    "resource_group_name": "production-environment",
+    "provider": "azurerm",
+    "include_role_assignment": true,
+    "parallelism": 5,
+    "continue_on_error": true
+  }
+}
+
+# Export resources using Azure Resource Graph query
+{
+  "tool": "aztfexport_query",
+  "arguments": {
+    "query": "type =~ 'Microsoft.Storage/storageAccounts' and location == 'eastus'",
+    "provider": "azurerm",
+    "dry_run": true,
+    "name_pattern": "storage_{name}"
+  }
+}
+
+# Get aztfexport configuration
+{
+  "tool": "aztfexport_get_config",
+  "arguments": {
+    "key": "telemetry_enabled"
+  }
+}
+
+# Set aztfexport configuration (disable telemetry)
+{
+  "tool": "aztfexport_set_config",
+  "arguments": {
+    "key": "telemetry_enabled",
+    "value": "false"
   }
 }
 ```
@@ -331,6 +437,7 @@ tf-mcp-server/
 │           ├── avm_docs_provider.py     # Azure Verified Modules provider
 │           ├── azapi_docs_provider.py   # AzAPI documentation provider  
 │           ├── azurerm_docs_provider.py # AzureRM documentation provider
+│           ├── aztfexport_runner.py     # Azure Export for Terraform (aztfexport) integration
 │           ├── conftest_avm_runner.py   # Conftest policy validation
 │           ├── terraform_runner.py      # Terraform command execution
 │           └── tflint_runner.py         # TFLint static analysis
