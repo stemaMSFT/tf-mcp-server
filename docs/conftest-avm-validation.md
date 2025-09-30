@@ -32,6 +32,29 @@ The Conftest Azure policy validation tools provide integration with Azure securi
 
 ## Available Tools
 
+### `check_conftest_installation`
+
+Check if Conftest is installed and get version information.
+
+This tool verifies that Conftest is properly installed and accessible on your system. It's recommended to run this before using any other Conftest validation tools.
+
+**Parameters:**
+- None required
+
+**Returns:**
+- Installation status (true/false)
+- Version information if installed
+- Installation instructions if not installed
+- Executable path if found
+
+**Example Usage:**
+```python
+{
+  "tool": "check_conftest_installation",
+  "arguments": {}
+}
+```
+
 ### `run_conftest_workspace_validation`
 
 Validate Terraform files in a workspace folder against Azure security policies and best practices using Conftest.
@@ -242,7 +265,7 @@ These tools are automatically integrated into the Azure Terraform MCP Server and
 
 The workspace-based tools are designed to work seamlessly with other tools in the MCP server:
 
-1. **With AzTFExport**: After using `aztfexport_resource` to export Azure resources to a workspace folder, use `run_conftest_workspace_validation` to validate the exported Terraform files.
+1. **With AzTFExport**: After using `export_azure_resource` to export Azure resources to a workspace folder, use `run_conftest_workspace_validation` to validate the exported Terraform files.
 
 2. **Continuous Validation**: Run workspace validation after making changes to Terraform files in workspace folders to ensure compliance with Azure policies.
 

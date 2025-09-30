@@ -2,6 +2,7 @@
 Main server implementation for Azure Terraform MCP Server.
 """
 
+import json
 import logging
 from typing import Dict, Any
 from pydantic import Field
@@ -15,6 +16,8 @@ from ..tools.terraform_runner import get_terraform_runner
 from ..tools.tflint_runner import get_tflint_runner
 from ..tools.conftest_avm_runner import get_conftest_avm_runner
 from ..tools.aztfexport_runner import get_aztfexport_runner
+
+from ..tools.golang_source_provider import get_golang_source_provider
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ def create_server(config: Config) -> FastMCP:
     tflint_runner = get_tflint_runner()
     conftest_avm_runner = get_conftest_avm_runner()
     aztfexport_runner = get_aztfexport_runner()
+    golang_source_provider = get_golang_source_provider()
 
     # ==========================================
     # DOCUMENTATION TOOLS
@@ -140,8 +144,8 @@ def create_server(config: Config) -> FastMCP:
                 f"Error: get_avm_outputs({module_name}, {module_version}): {str(e)}")
             return "failed to retrieve module outputs"
 
-    @mcp.tool("azurerm_terraform_documentation_retriever")
-    async def retrieve_azurerm_docs(
+    @mcp.tool("get_azurerm_provider_documentation")
+    async def get_azurerm_provider_documentation(
         resource_type_name: str,
         doc_type: str = Field(
             "resource", description="Type of documentation: 'resource' for resources or 'data-source' for data sources"),
@@ -269,13 +273,20 @@ def create_server(config: Config) -> FastMCP:
                 "resource_type": resource_type_name
             }
 
-    @mcp.tool("azapi_terraform_documentation_retriever")
-    async def retrieve_azapi_docs(resource_type_name: str) -> str:
+    @mcp.tool("get_azapi_provider_documentation")
+    async def get_azapi_provider_documentation(resource_type_name: str) -> str:
         """
         Retrieve documentation for a specific AzAPI resource type in Terraform.
 
         Args:
-            resource_type_name: The name of the AzAPI resource type
+            resource_type_name: The Azure resource type in the format used by Azure REST API. 
+                              This should be the full resource type path including the provider namespace.
+                              Examples:
+                              - Microsoft.Kusto/clusters
+                              - Microsoft.Batch/batchAccounts/pools  
+                              - Microsoft.Compute/virtualMachineScaleSets/virtualmachines
+                              - Microsoft.Storage/storageAccounts
+                              - Microsoft.Network/virtualNetworks/subnets
 
         Returns:
             The documentation for the specified AzAPI resource type
@@ -398,59 +409,6 @@ def create_server(config: Config) -> FastMCP:
     # ==========================================
     # UTILITY TOOLS
     # ==========================================
-
-    @mcp.tool("analyze_azure_resources")
-    async def analyze_azure_resources(hcl_content: str) -> Dict[str, Any]:
-        """
-        Analyze Azure resources in Terraform configurations.
-
-        Args:
-            hcl_content: Terraform HCL content to analyze
-
-        Returns:
-            Analysis results with resource information and recommendations
-        """
-        try:
-            # This is a simplified analysis - in a real implementation,
-            # you would parse the HCL and extract detailed resource information
-
-            resources_found = []
-            lines = hcl_content.split('\n')
-
-            for line in lines:
-                line = line.strip()
-                if line.startswith('resource ') and 'azurerm_' in line:
-                    # Extract resource type and name
-                    parts = line.split('"')
-                    if len(parts) >= 4:
-                        resource_type = parts[1]
-                        resource_name = parts[3]
-                        resources_found.append({
-                            "type": resource_type,
-                            "name": resource_name
-                        })
-
-            return {
-                "total_resources": len(resources_found),
-                "azure_resources": resources_found,
-                "analysis_summary": f"Found {len(resources_found)} Azure resources in the configuration",
-                "recommendations": [
-                    "Review security configurations for all resources",
-                    "Ensure proper tagging strategy is implemented",
-                    "Validate resource naming conventions",
-                    "Check for best practices compliance"
-                ]
-            }
-
-        except Exception as e:
-            logger.error(f"Error analyzing Azure resources: {e}")
-            return {
-                "error": f"Failed to analyze resources: {str(e)}",
-                "total_resources": 0,
-                "azure_resources": [],
-                "analysis_summary": "Analysis failed",
-                "recommendations": []
-            }
 
     @mcp.tool("check_tflint_installation")
     async def check_tflint_installation() -> Dict[str, Any]:
@@ -654,6 +612,28 @@ def create_server(config: Config) -> FastMCP:
                 }
             }
 
+    @mcp.tool("check_conftest_installation")
+    async def check_conftest_installation() -> Dict[str, Any]:
+        """
+        Check if Conftest is installed and get version information.
+        
+        Conftest is an Open Policy Agent (OPA) tool for testing structured configuration data.
+        It's used in this server to validate Terraform configurations against Azure security
+        policies and best practices.
+        
+        Returns:
+            Installation status, version information, and installation instructions if needed
+        """
+        try:
+            return await conftest_avm_runner.check_conftest_installation()
+        except Exception as e:
+            logger.error(f"Error checking Conftest installation: {e}")
+            return {
+                'installed': False,
+                'error': f'Failed to check Conftest installation: {str(e)}',
+                'status': 'Installation check failed'
+            }
+
     # ==========================================
     # AZURE EXPORT FOR TERRAFORM (AZTFEXPORT) TOOLS
     # ==========================================
@@ -676,8 +656,8 @@ def create_server(config: Config) -> FastMCP:
                 'status': 'Installation check failed'
             }
 
-    @mcp.tool("aztfexport_resource")
-    async def aztfexport_resource(
+    @mcp.tool("export_azure_resource")
+    async def export_azure_resource(
         resource_id: str = Field(...,
                                  description="Azure resource ID to export"),
         output_folder_name: str = Field(
@@ -752,8 +732,8 @@ def create_server(config: Config) -> FastMCP:
                 'exit_code': -1
             }
 
-    @mcp.tool("aztfexport_resource_group")
-    async def aztfexport_resource_group(
+    @mcp.tool("export_azure_resource_group")
+    async def export_azure_resource_group(
         resource_group_name: str = Field(...,
                                          description="Name of the resource group to export"),
         output_folder_name: str = Field(
@@ -828,8 +808,8 @@ def create_server(config: Config) -> FastMCP:
                 'exit_code': -1
             }
 
-    @mcp.tool("aztfexport_query")
-    async def aztfexport_query(
+    @mcp.tool("export_azure_resources_by_query")
+    async def export_azure_resources_by_query(
         query: str = Field(...,
                            description="Azure Resource Graph query (WHERE clause)"),
         output_folder_name: str = Field(
@@ -910,8 +890,8 @@ def create_server(config: Config) -> FastMCP:
                 'exit_code': -1
             }
 
-    @mcp.tool("aztfexport_get_config")
-    async def aztfexport_get_config(
+    @mcp.tool("get_aztfexport_config")
+    async def get_aztfexport_config(
         key: str = Field(
             "", description="Specific config key to retrieve (optional)")
     ) -> Dict[str, Any]:
@@ -939,8 +919,8 @@ def create_server(config: Config) -> FastMCP:
                 'error': f'Failed to get configuration: {str(e)}'
             }
 
-    @mcp.tool("aztfexport_set_config")
-    async def aztfexport_set_config(
+    @mcp.tool("set_aztfexport_config")
+    async def set_aztfexport_config(
         key: str = Field(..., description="Configuration key to set"),
         value: str = Field(..., description="Configuration value to set")
     ) -> Dict[str, Any]:
@@ -970,6 +950,499 @@ def create_server(config: Config) -> FastMCP:
                 'error': f'Failed to set configuration: {str(e)}'
             }
 
+
+    # ==========================================
+    # TERRAFORM SOURCE CODE QUERY TOOLS
+    # ==========================================
+    
+    @mcp.tool("get_terraform_source_providers")
+    def get_terraform_source_providers() -> Dict[str, Any]:
+        """
+        Get all supported Terraform provider names available for source code query.
+        
+        Returns a list of provider names that have been indexed and are available
+        for golang source code analysis.
+        
+        Returns:
+            Dictionary with supported providers list
+        """
+        try:
+            providers = golang_source_provider.get_supported_providers()
+            return {
+                "supported_providers": providers,
+                "total_count": len(providers),
+                "description": "Terraform providers available for source code analysis"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting supported providers: {e}")
+            return {
+                "error": f"Failed to get supported providers: {str(e)}",
+                "supported_providers": []
+            }
+    
+    @mcp.tool("query_terraform_source_code")
+    async def query_terraform_source_code(
+        block_type: str = Field(..., description="Terraform block type: resource, data, ephemeral"),
+        terraform_type: str = Field(..., description="Terraform type (e.g., azurerm_resource_group)"),
+        entrypoint_name: str = Field(..., description="Function/method name (create, read, update, delete, schema, etc.)"),
+        tag: str = Field(default="", description="Version tag (optional)")
+    ) -> str:
+        """
+        Read Terraform provider source code for a given Terraform block.
+        
+        Use this tool to understand how Terraform providers implement specific resources,
+        how they call APIs, and to debug issues related to specific Terraform resources.
+        
+        Args:
+            block_type: The terraform block type
+            terraform_type: The terraform resource/data type
+            entrypoint_name: The function or method name to read
+            tag: Optional version tag
+            
+        Returns:
+            Source code as string
+        """
+        try:
+            source_code = await golang_source_provider.query_terraform_source_code(
+                block_type=block_type,
+                terraform_type=terraform_type,
+                entrypoint_name=entrypoint_name,
+                tag=tag if tag else None
+            )
+            return source_code
+            
+        except Exception as e:
+            logger.error(f"Error querying terraform source code: {e}")
+            return f"Error: Failed to query terraform source code: {str(e)}"
+
+    # ==========================================
+    # GOLANG SOURCE CODE ANALYSIS TOOLS
+    # ==========================================
+    
+    @mcp.tool("get_golang_namespaces")
+    def get_golang_namespaces() -> Dict[str, Any]:
+        """
+        Get all indexed golang namespaces available for source code analysis.
+        
+        Returns a list of golang namespaces/packages that have been indexed
+        and are available for source code retrieval.
+        
+        Returns:
+            Dictionary with supported namespaces
+        """
+        try:
+            namespaces = golang_source_provider.get_supported_namespaces()
+            return {
+                "supported_namespaces": namespaces,
+                "total_count": len(namespaces),
+                "description": "Golang namespaces available for source code analysis"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting supported namespaces: {e}")
+            return {
+                "error": f"Failed to get supported namespaces: {str(e)}",
+                "supported_namespaces": []
+            }
+    
+    @mcp.tool("get_golang_namespace_tags")
+    async def get_golang_namespace_tags(
+        namespace: str = Field(..., description="Golang namespace to get tags for")
+    ) -> Dict[str, Any]:
+        """
+        Get all supported tags/versions for a specific golang namespace.
+        
+        Use this tool to discover available versions/tags for a specific golang
+        namespace before analyzing code from a particular version.
+        
+        Args:
+            namespace: The golang namespace to query
+            
+        Returns:
+            Dictionary with supported tags for the namespace
+        """
+        try:
+            tags = await golang_source_provider.get_supported_tags(namespace)
+            return {
+                "namespace": namespace,
+                "supported_tags": tags,
+                "total_count": len(tags),
+                "latest_tag": tags[0] if tags else "unknown"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting supported tags: {e}")
+            return {
+                "error": f"Failed to get supported tags: {str(e)}",
+                "namespace": namespace,
+                "supported_tags": []
+            }
+    
+    @mcp.tool("query_golang_source_code")
+    async def query_golang_source_code(
+        namespace: str = Field(..., description="Golang namespace to query"),
+        symbol: str = Field(..., description="Symbol type: func, method, type, var"),
+        name: str = Field(..., description="Name of the symbol to read"),
+        receiver: str = Field(default="", description="Method receiver type (required for methods)"),
+        tag: str = Field(default="", description="Version tag (optional)")
+    ) -> str:
+        """
+        Read golang source code for given type, variable, constant, function or method definition.
+        
+        Use this tool when you need to see function, method, type, or variable definitions
+        while reading golang source code, understand how Terraform providers expand or
+        flatten structs, or debug issues related to specific Terraform resources.
+        
+        Args:
+            namespace: The golang namespace/package
+            symbol: The symbol type (func, method, type, var)
+            name: The name of the symbol
+            receiver: The receiver type (for methods only)
+            tag: Version tag
+            
+        Returns:
+            Source code as string
+        """
+        try:
+            source_code = await golang_source_provider.query_golang_source_code(
+                namespace=namespace,
+                symbol=symbol,
+                name=name,
+                receiver=receiver if receiver else None,
+                tag=tag if tag else None
+            )
+            return source_code
+            
+        except Exception as e:
+            logger.error(f"Error querying golang source code: {e}")
+            return f"Error: Failed to query golang source code: {str(e)}"
+    
+    # ==========================================
+    # AZURE BEST PRACTICES TOOL
+    # ==========================================
+
+    @mcp.tool("get_azure_best_practices")
+    def get_azure_best_practices(
+        resource: str = Field(
+            default="general",
+            description="The Azure resource type or area to get best practices for. Options: 'general', 'azurerm', 'azapi', 'azuread', 'security', 'networking', 'storage', 'compute', 'database', 'monitoring', 'deployment'"
+        ),
+        action: str = Field(
+            default="code-generation",
+            description="The type of action to get best practices for. Options: 'code-generation', 'deployment', 'configuration', 'security', 'performance', 'cost-optimization'"
+        )
+    ) -> str:
+        """Get Azure and Terraform best practices for specific resources and actions.
+
+        This tool provides comprehensive best practices for working with Azure resources using Terraform,
+        including provider-specific recommendations, security guidelines, and optimization tips.
+
+        Args:
+            resource: The Azure resource type or area (default: "general")
+            action: The type of action (default: "code-generation")
+
+        Returns:
+            Detailed best practices recommendations as a formatted string
+        """
+        
+        try:
+            # Define best practices content
+            best_practices = {}
+            
+            # General Azure + Terraform Best Practices
+            if resource == "general":
+                if action == "code-generation":
+                    best_practices = {
+                        "provider_versions": {
+                            "title": "Provider Version Management",
+                            "recommendations": [
+                                "Use AzureRM provider version 4.x or later for new projects - provides latest features and bug fixes",
+                                "Use AzAPI provider version 2.x or later for advanced scenarios requiring ARM API access",
+                                "Pin provider versions in terraform block to ensure reproducible builds",
+                                "Regularly update providers to get security patches and new features",
+                                "Test provider upgrades in non-production environments first"
+                            ]
+                        },
+                        "resource_organization": {
+                            "title": "Resource Organization",
+                            "recommendations": [
+                                "Use consistent naming conventions (e.g., <env>-<app>-<resource>-<region>)",
+                                "Group related resources using resource groups with descriptive names",
+                                "Use tags consistently across all resources for cost management and governance",
+                                "Implement proper module structure for reusability",
+                                "Separate configuration files by environment (dev, staging, prod)"
+                            ]
+                        },
+                        "state_management": {
+                            "title": "State Management",
+                            "recommendations": [
+                                "Always use remote state backend (Azure Storage Account recommended)",
+                                "Enable state locking to prevent concurrent modifications",
+                                "Use separate state files for different environments",
+                                "Implement proper backup strategy for state files",
+                                "Never commit state files to version control"
+                            ]
+                        }
+                    }
+                elif action == "deployment":
+                    best_practices = {
+                        "deployment_strategy": {
+                            "title": "Deployment Strategy",
+                            "recommendations": [
+                                "Use Azure DevOps or GitHub Actions for CI/CD pipelines",
+                                "Implement infrastructure validation before deployment",
+                                "Use service principals with minimal required permissions",
+                                "Enable plan review process for production deployments",
+                                "Implement rollback strategies for critical resources"
+                            ]
+                        },
+                        "environment_management": {
+                            "title": "Environment Management",
+                            "recommendations": [
+                                "Use separate subscriptions for different environments when possible",
+                                "Implement consistent deployment patterns across environments",
+                                "Use environment-specific variable files",
+                                "Enable monitoring and alerting for deployment processes",
+                                "Document deployment procedures and emergency contacts"
+                            ]
+                        }
+                    }
+                elif action == "security":
+                    best_practices = {
+                        "security_fundamentals": {
+                            "title": "Security Fundamentals",
+                            "recommendations": [
+                                "Enable Azure Security Center and follow its recommendations",
+                                "Use Managed Identities instead of service principals where possible",
+                                "Implement network security groups and application security groups",
+                                "Enable diagnostic logging and monitoring for all resources",
+                                "Regular security assessments and compliance checks"
+                            ]
+                        }
+                    }
+            
+            # AzureRM Provider Specific
+            elif resource == "azurerm":
+                if action == "code-generation":
+                    best_practices = {
+                        "azurerm_4x_features": {
+                            "title": "AzureRM 4.x Best Practices",
+                            "recommendations": [
+                                "Use AzureRM 4.x for improved resource lifecycle management",
+                                "Leverage new data sources for better resource discovery",
+                                "Use enhanced validation features in 4.x",
+                                "Take advantage of improved error messages and debugging",
+                                "Utilize new resource arguments for better configuration"
+                            ]
+                        },
+                        "resource_configuration": {
+                            "title": "Resource Configuration",
+                            "recommendations": [
+                                "Use explicit resource dependencies with depends_on when needed",
+                                "Implement proper lifecycle rules (prevent_destroy, ignore_changes)",
+                                "Use locals for complex expressions and repeated values",
+                                "Validate inputs using variable validation blocks",
+                                "Use count or for_each for resource iteration instead of duplicating blocks"
+                            ]
+                        }
+                    }
+            
+            # AzAPI Provider Specific
+            elif resource == "azapi":
+                if action == "code-generation":
+                    best_practices = {
+                        "azapi_2x_improvements": {
+                            "title": "AzAPI 2.x Best Practices",
+                            "recommendations": [
+                                "Use AzAPI 2.x for direct ARM API access and preview features",
+                                "In AzAPI 2.x, use HCL objects directly instead of jsonencode() function",
+                                "Example: body = { properties = { enabled = true } } instead of body = jsonencode({ properties = { enabled = true } })",
+                                "Leverage AzAPI for resources not yet available in AzureRM provider",
+                                "Use AzAPI data sources for reading ARM resources with full API response",
+                                "Implement proper error handling for API-level operations"
+                            ]
+                        },
+                        "azapi_usage_patterns": {
+                            "title": "AzAPI Usage Patterns",
+                            "recommendations": [
+                                "Use azapi_resource for creating/managing ARM resources directly",
+                                "Use azapi_update_resource for patching existing resources",
+                                "Use azapi_data_source for reading resources with full ARM API response",
+                                "Combine AzAPI with AzureRM resources in the same configuration when appropriate",
+                                "Use response_export_values to extract specific values from API responses"
+                            ]
+                        }
+                    }
+            
+            # Security Best Practices
+            elif resource == "security":
+                best_practices = {
+                    "access_control": {
+                        "title": "Access Control",
+                        "recommendations": [
+                            "Implement Role-Based Access Control (RBAC) with principle of least privilege",
+                            "Use Managed Identities for Azure service authentication",
+                            "Enable Multi-Factor Authentication for all administrative accounts",
+                            "Regular review and cleanup of unused identities and permissions",
+                            "Use Azure Key Vault for secrets management"
+                        ]
+                    },
+                    "network_security": {
+                        "title": "Network Security",
+                        "recommendations": [
+                            "Use Network Security Groups (NSGs) to control network traffic",
+                            "Implement Azure Firewall or third-party firewalls for advanced protection",
+                            "Use Private Endpoints for secure connectivity to PaaS services",
+                            "Enable DDoS Protection Standard for critical workloads",
+                            "Regular network security assessments and penetration testing"
+                        ]
+                    }
+                }
+            
+            # Networking Best Practices
+            elif resource == "networking":
+                best_practices = {
+                    "vnet_design": {
+                        "title": "Virtual Network Design",
+                        "recommendations": [
+                            "Plan IP address spaces carefully to avoid conflicts",
+                            "Use hub-and-spoke topology for complex network architectures",
+                            "Implement proper subnet segmentation for different tiers",
+                            "Use Azure Virtual Network peering for cross-VNet connectivity",
+                            "Enable flow logs for network troubleshooting and security analysis"
+                        ]
+                    }
+                }
+            
+            # Storage Best Practices
+            elif resource == "storage":
+                best_practices = {
+                    "storage_configuration": {
+                        "title": "Storage Configuration",
+                        "recommendations": [
+                            "Choose appropriate storage tier (Hot, Cool, Archive) based on access patterns",
+                            "Enable soft delete and versioning for data protection",
+                            "Use customer-managed keys for encryption when required",
+                            "Implement lifecycle management policies for cost optimization",
+                            "Enable monitoring and alerting for storage metrics"
+                        ]
+                    }
+                }
+            
+            # Compute Best Practices
+            elif resource == "compute":
+                best_practices = {
+                    "virtual_machines": {
+                        "title": "Virtual Machine Best Practices",
+                        "recommendations": [
+                            "Use managed disks for better reliability and performance",
+                            "Enable Azure Backup for data protection",
+                            "Use Availability Sets or Availability Zones for high availability",
+                            "Right-size VMs based on actual usage patterns",
+                            "Use spot instances for cost-effective temporary workloads",
+                            "Enable boot diagnostics for troubleshooting"
+                        ]
+                    },
+                    "container_services": {
+                        "title": "Container Services",
+                        "recommendations": [
+                            "Use Azure Kubernetes Service (AKS) for container orchestration",
+                            "Enable cluster autoscaler for dynamic scaling",
+                            "Use Azure Container Registry for secure image storage",
+                            "Implement pod security policies and network policies",
+                            "Enable monitoring with Azure Monitor for containers"
+                        ]
+                    }
+                }
+            
+            # Database Best Practices
+            elif resource == "database":
+                best_practices = {
+                    "sql_database": {
+                        "title": "SQL Database Configuration",
+                        "recommendations": [
+                            "Use Azure SQL Database for managed PaaS database service",
+                            "Enable automatic backups and point-in-time restore",
+                            "Use Always Encrypted for sensitive data protection",
+                            "Implement proper connection pooling",
+                            "Enable threat detection and vulnerability assessments",
+                            "Use read replicas for read-heavy workloads"
+                        ]
+                    },
+                    "cosmos_db": {
+                        "title": "Cosmos DB Best Practices",
+                        "recommendations": [
+                            "Choose appropriate consistency level based on requirements",
+                            "Design partition keys for even data distribution",
+                            "Use autoscale for variable workloads",
+                            "Enable multi-region writes for global applications",
+                            "Implement proper indexing strategies for performance"
+                        ]
+                    }
+                }
+            
+            # Monitoring Best Practices
+            elif resource == "monitoring":
+                best_practices = {
+                    "observability": {
+                        "title": "Monitoring and Observability",
+                        "recommendations": [
+                            "Use Azure Monitor for comprehensive monitoring solution",
+                            "Implement Application Insights for application performance monitoring",
+                            "Set up log analytics workspace for centralized logging",
+                            "Create custom dashboards for key metrics visualization",
+                            "Configure alerts for critical metrics and events",
+                            "Use Azure Service Health for service incident notifications"
+                        ]
+                    }
+                }
+            
+            # Default fallback
+            else:
+                best_practices = {
+                    "general_guidance": {
+                        "title": "General Azure Terraform Guidance",
+                        "recommendations": [
+                            "Always use the latest stable provider versions",
+                            "Implement proper resource tagging strategy",
+                            "Use remote state management with locking",
+                            "Follow infrastructure as code best practices",
+                            "Regular security and compliance reviews"
+                        ]
+                    }
+                }
+            
+            # Format the response
+            response_lines = [
+                f"# Azure Best Practices: {resource.title()} - {action.replace('-', ' ').title()}",
+                ""
+            ]
+            
+            for category, content in best_practices.items():
+                response_lines.append(f"## {content['title']}")
+                response_lines.append("")
+                for i, recommendation in enumerate(content['recommendations'], 1):
+                    response_lines.append(f"{i}. {recommendation}")
+                response_lines.append("")
+            
+            # Add additional context
+            response_lines.extend([
+                "## Additional Resources",
+                "",
+                "- [Azure Well-Architected Framework](https://docs.microsoft.com/azure/architecture/framework/)",
+                "- [Terraform Azure Provider Documentation](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)",
+                "- [AzAPI Provider Documentation](https://registry.terraform.io/providers/azure/azapi/latest/docs)",
+                "- [Azure Security Best Practices](https://docs.microsoft.com/azure/security/fundamentals/best-practices-and-patterns)",
+                ""
+            ])
+            
+            return "\n".join(response_lines)
+            
+        except Exception as e:
+            logger.error(f"Error getting Azure best practices: {e}")
+            return f"Error: Failed to retrieve Azure best practices: {str(e)}"
+    
     return mcp
 
 
