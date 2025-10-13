@@ -331,19 +331,26 @@ def create_server(config: Config) -> FastMCP:
     @mcp.tool("run_terraform_command")
     async def run_terraform_command(
         command: str = Field(
-            ..., description="Terraform command to execute (init, plan, apply, destroy, validate, fmt)"),
+            ..., description="Terraform command to execute (init, plan, apply, destroy, validate, fmt, state)"),
         workspace_folder: str = Field(
             ..., description="Workspace folder containing Terraform files."),
         auto_approve: bool = Field(
             False, description="Auto-approve for apply/destroy commands (USE WITH CAUTION!)"),
         upgrade: bool = Field(
-            False, description="Upgrade providers/modules for init command")
+            False, description="Upgrade providers/modules for init command"),
+        state_subcommand: str = Field(
+            "", description="State subcommand (list, show, mv, rm, pull, push) - required when command='state'"),
+        state_args: str = Field(
+            "", description="Arguments for state subcommand. For 'mv': 'source destination'. For 'show'/'rm': 'address'. Leave empty for 'list'/'pull'/'push'")
     ) -> Dict[str, Any]:
         """
         Execute a Terraform command within an existing workspace directory.
 
-        This unified tool replaces individual terraform_init, terraform_plan, terraform_apply,
-        terraform_destroy, terraform_format, and terraform_execute_command tools.
+        IMPORTANT: ALWAYS use this tool to run Terraform commands instead of running them directly in bash/terminal.
+        This is especially critical after using aztfexport or other workspace folder operations.
+        
+        This unified tool supports standard Terraform commands and state management operations.
+        It provides proper workspace management, error handling, and output formatting.
 
         Args:
             command: Terraform command to execute:
@@ -353,12 +360,27 @@ def create_server(config: Config) -> FastMCP:
                 - 'destroy': Destroy Terraform-managed resources
                 - 'validate': Validate configuration files
                 - 'fmt': Format configuration files
+                - 'state': State management operations (requires state_subcommand)
             workspace_folder: Workspace folder containing Terraform files
             auto_approve: Auto-approve for destructive operations (apply/destroy)
             upgrade: Upgrade providers/modules during init
+            state_subcommand: State operation to perform:
+                - 'list': List all resources in state
+                - 'show': Show details of a specific resource
+                - 'mv': Move/rename a resource in state (requires state_args with 'source destination')
+                - 'rm': Remove a resource from state
+                - 'pull': Pull current state and output to stdout
+                - 'push': Push a local state file to remote backend
+            state_args: Arguments for the state subcommand
 
         Returns:
             Command execution result with exit_code, stdout, stderr, and command metadata.
+            
+        Examples:
+            List all resources: command='state', state_subcommand='list'
+            Show resource: command='state', state_subcommand='show', state_args='azurerm_resource_group.main'
+            Rename resource: command='state', state_subcommand='mv', state_args='azurerm_resource_group.res-0 azurerm_resource_group.main'
+            Remove resource: command='state', state_subcommand='rm', state_args='azurerm_resource_group.old'
         """
         workspace_name = workspace_folder.strip()
         if not workspace_name:
@@ -371,6 +393,85 @@ def create_server(config: Config) -> FastMCP:
                 "stderr": "workspace_folder is required"
             }
 
+        # Handle state commands specially
+        if command == "state":
+            if not state_subcommand:
+                return {
+                    "command": "state",
+                    "success": False,
+                    "error": "state_subcommand is required when command='state'",
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "state_subcommand must be one of: list, show, mv, rm, pull, push"
+                }
+            
+            # Validate state subcommand
+            valid_subcommands = ['list', 'show', 'mv', 'rm', 'pull', 'push']
+            if state_subcommand not in valid_subcommands:
+                return {
+                    "command": f"state {state_subcommand}",
+                    "success": False,
+                    "error": f"Invalid state subcommand: {state_subcommand}",
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": f"state_subcommand must be one of: {', '.join(valid_subcommands)}"
+                }
+            
+            # Validate state_args for commands that require them
+            if state_subcommand in ['show', 'rm'] and not state_args:
+                return {
+                    "command": f"state {state_subcommand}",
+                    "success": False,
+                    "error": f"state_args is required for 'state {state_subcommand}'",
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": f"state_args must contain the resource address for 'state {state_subcommand}'"
+                }
+            
+            if state_subcommand == 'mv' and not state_args:
+                return {
+                    "command": "state mv",
+                    "success": False,
+                    "error": "state_args is required for 'state mv'",
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "state_args must contain 'source destination' for 'state mv'"
+                }
+            
+            # Build the full state command
+            full_command = f"state {state_subcommand}"
+            if state_args:
+                full_command += f" {state_args}"
+            
+            try:
+                result = await terraform_runner.execute_terraform_command(
+                    command=full_command,
+                    workspace_folder=workspace_name
+                )
+            except Exception as e:
+                return {
+                    "command": full_command,
+                    "success": False,
+                    "error": str(e),
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": str(e)
+                }
+            
+            if isinstance(result, dict):
+                result["command"] = full_command
+                return result
+            
+            return {
+                "command": full_command,
+                "success": True,
+                "output": str(result),
+                "exit_code": 0,
+                "stdout": str(result),
+                "stderr": ""
+            }
+
+        # Handle regular commands
         kwargs = {}
         if command in ['apply', 'destroy'] and auto_approve:
             kwargs['auto_approve'] = auto_approve
@@ -512,7 +613,7 @@ def create_server(config: Config) -> FastMCP:
             "", description="Comma-separated list of custom policy paths")
     ) -> Dict[str, Any]:
         """
-        Validate Terraform files in a workspace folder against Azure security policies and best practices using Conftest.
+        Validate Terraform files in a workspace folder against Azure security policies using Conftest.
 
     This tool validates all .tf files in the specified workspace folder, similar to how aztfexport creates
     folders under the configured workspace root (default: /workspace). Supports validation of Azure resources using azurerm, azapi, and AVM providers
@@ -1126,21 +1227,26 @@ def create_server(config: Config) -> FastMCP:
     def get_azure_best_practices(
         resource: str = Field(
             default="general",
-            description="The Azure resource type or area to get best practices for. Options: 'general', 'azurerm', 'azapi', 'azuread', 'security', 'networking', 'storage', 'compute', 'database', 'monitoring', 'deployment'"
+            description="The Azure resource type or area to get best practices for. Options: 'general', 'azurerm', 'azapi', 'azuread', 'aztfexport', 'security', 'networking', 'storage', 'compute', 'database', 'monitoring', 'deployment'"
         ),
         action: str = Field(
             default="code-generation",
-            description="The type of action to get best practices for. Options: 'code-generation', 'deployment', 'configuration', 'security', 'performance', 'cost-optimization'"
+            description="The type of action to get best practices for. Options: 'code-generation', 'code-cleanup', 'deployment', 'configuration', 'security', 'performance', 'cost-optimization'"
         )
     ) -> str:
         """Get Azure and Terraform best practices for specific resources and actions.
 
         This tool provides comprehensive best practices for working with Azure resources using Terraform,
         including provider-specific recommendations, security guidelines, and optimization tips.
+        
+        Special action 'code-cleanup' for resource 'aztfexport': Provides detailed guidance on making
+        exported Terraform code production-ready, including resource renaming, variable/local usage,
+        state file management, and security hardening.
 
         Args:
             resource: The Azure resource type or area (default: "general")
             action: The type of action (default: "code-generation")
+                   Use 'code-cleanup' with resource='aztfexport' for post-export code refinement
 
         Returns:
             Detailed best practices recommendations as a formatted string
@@ -1271,6 +1377,134 @@ def create_server(config: Config) -> FastMCP:
                                 "Use azapi_data_source for reading resources with full ARM API response",
                                 "Combine AzAPI with AzureRM resources in the same configuration when appropriate",
                                 "Use response_export_values to extract specific values from API responses"
+                            ]
+                        }
+                    }
+            
+            # Aztfexport Best Practices
+            elif resource == "aztfexport":
+                if action == "code-cleanup":
+                    best_practices = {
+                        "resource_naming": {
+                            "title": "Resource Naming and Renaming",
+                            "recommendations": [
+                                "Replace generic exported resource names (e.g., 'res-0', 'res-1') with meaningful, descriptive names",
+                                "Use consistent naming conventions: '<env>-<app>-<resource_type>-<instance>' (e.g., 'prod-webapp-storage-main')",
+                                "CRITICAL: Use 'terraform state mv' command to rename resources in state file to match new names",
+                                "Example: terraform state mv 'azurerm_resource_group.res-0' 'azurerm_resource_group.main'",
+                                "Always run 'terraform plan' after state moves to verify no resources will be recreated",
+                                "Document all resource name changes and corresponding state mv commands for team reference"
+                            ]
+                        },
+                        "variables_vs_locals": {
+                            "title": "Variables vs Locals - When to Use Each",
+                            "recommendations": [
+                                "Use VARIABLES for values likely to be changed by end users: location, resource names, IP ranges, SKU sizes, admin usernames",
+                                "Use LOCALS for computed values, repeated expressions, or values derived from multiple inputs",
+                                "Use LOCALS for standardized tags, resource naming patterns, and categorization logic",
+                                "Use LOCALS for concatenating or transforming variable values (e.g., resource_group_name = '${var.environment}-${var.app_name}-rg')",
+                                "Add descriptive 'description' field to all variables explaining their purpose and valid values",
+                                "Set appropriate 'type' constraints on variables (string, number, bool, list, map, object)",
+                                "Provide sensible defaults for optional variables, but leave required values (like location) without defaults"
+                            ]
+                        },
+                        "code_structure": {
+                            "title": "Code Structure and Organization",
+                            "recommendations": [
+                                "Create separate files: variables.tf (inputs), locals.tf (computed values), main.tf (resources), outputs.tf (outputs)",
+                                "Split large main.tf into logical files: networking.tf, compute.tf, storage.tf, security.tf",
+                                "Group related locals together with comments explaining their purpose",
+                                "Order resources logically: dependencies first, then dependent resources",
+                                "Add comments above complex resource blocks explaining business purpose",
+                                "Remove any sensitive data that may have been exported (connection strings, keys, passwords)"
+                            ]
+                        },
+                        "production_readiness": {
+                            "title": "Production Readiness Improvements",
+                            "recommendations": [
+                                "Add lifecycle blocks with 'prevent_destroy = true' for critical resources (databases, storage with data)",
+                                "Use 'ignore_changes' for properties that may drift or are managed outside Terraform (auto-scaling, tags managed by Azure Policy)",
+                                "Add comprehensive resource tags: environment, application, owner, cost-center, data-classification, created-by",
+                                "Create outputs for resource IDs and properties that other configurations might reference",
+                                "Add validation blocks to variables to catch configuration errors early",
+                                "Document dependencies between resources and any manual steps required",
+                                "Add timeouts block for resources that may take long to create/update/delete"
+                            ]
+                        },
+                        "security_hardening": {
+                            "title": "Security and Compliance Hardening",
+                            "recommendations": [
+                                "Review and tighten network security groups - remove overly permissive rules",
+                                "Enable diagnostic settings and logging for all applicable resources",
+                                "Add Azure Policy compliance tags as required by organization",
+                                "Replace any hardcoded secrets with references to Azure Key Vault using data sources",
+                                "Enable private endpoints where applicable to avoid public internet exposure",
+                                "Add monitoring and alerting resources if not already present",
+                                "Review RBAC assignments and ensure principle of least privilege"
+                            ]
+                        },
+                        "state_file_management": {
+                            "title": "State File Updates and Management",
+                            "recommendations": [
+                                "CRITICAL: Always backup state file before making structural changes",
+                                "Use run_terraform_command with command='state' and state_subcommand='list' to see all resources",
+                                "Use run_terraform_command with command='state', state_subcommand='show', state_args='<resource_address>' to inspect details",
+                                "Use run_terraform_command with command='state', state_subcommand='mv', state_args='<source> <destination>' to rename resources",
+                                "Example: state_subcommand='mv', state_args='azurerm_resource_group.res-0 azurerm_resource_group.main'",
+                                "When renaming resources: 1) Update .tf files, 2) Run state mv command, 3) Run plan to verify no recreation",
+                                "Never manually edit the state JSON file - always use terraform state commands via run_terraform_command",
+                                "Test all state operations in development/test environment first",
+                                "Keep a log of all terraform state mv commands executed for audit trail"
+                            ]
+                        }
+                    }
+                elif action == "code-generation":
+                    best_practices = {
+                        "export_best_practices": {
+                            "title": "Azure Export Best Practices",
+                            "recommendations": [
+                                "Use aztfexport for exporting existing Azure resources to Terraform",
+                                "Choose appropriate provider: azurerm for most resources, azapi for preview features or unsupported resources",
+                                "Use resource-level export for single resources, resource group export for related resources",
+                                "Use query-based export for bulk operations across multiple resource groups",
+                                "Enable 'continue_on_error' for large exports to avoid failures from individual resources",
+                                "After export, follow 'code-cleanup' action best practices to make code production-ready"
+                            ]
+                        }
+                    }
+                elif action == "deployment":
+                    best_practices = {
+                        "state_management": {
+                            "title": "State Management for Exported Resources",
+                            "recommendations": [
+                                "IMPORTANT: Use 'terraform state mv' commands when renaming exported resources to avoid recreation",
+                                "Always backup state files before making structural changes to exported configurations",
+                                "Test state moves in non-production environments first",
+                                "Use 'terraform plan' after state moves to verify no unexpected changes",
+                                "Consider using 'terraform import' for resources that need to be managed separately",
+                                "Document all state move operations for team knowledge sharing"
+                            ]
+                        },
+                        "testing_and_validation": {
+                            "title": "Testing and Validation",
+                            "recommendations": [
+                                "Run 'terraform plan' after refactoring to ensure no unintended changes",
+                                "Test in development environment before applying to production",
+                                "Use terraform validate and terraform fmt for code quality",
+                                "Implement policy validation using Conftest or Azure Policy",
+                                "Set up monitoring to detect configuration drift",
+                                "Create rollback procedures for critical infrastructure changes"
+                            ]
+                        },
+                        "workflow_integration": {
+                            "title": "CI/CD Workflow Integration",
+                            "recommendations": [
+                                "Integrate exported configurations into existing CI/CD pipelines",
+                                "Add approval gates for production deployments of exported infrastructure",
+                                "Implement automated testing for exported configurations",
+                                "Use branch protection and pull request reviews for changes",
+                                "Set up notifications for infrastructure changes",
+                                "Document the export and refinement process for team adoption"
                             ]
                         }
                     }
